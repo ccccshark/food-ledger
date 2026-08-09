@@ -204,10 +204,38 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </PaperCard>
 
+          {/* 关于 */}
+          <PaperCard tape="pink" rotate={0.5} padding={16} showTape>
+            <View style={styles.cardTitleRow}>
+              <Tape color="pink" width={14} height={9} rotate={-6} />
+              <Text style={styles.cardTitle}>关于</Text>
+            </View>
+            <Text style={styles.aboutIntro}>
+              味笺是一本属于你的本地美食记账本。用拍立得、胶带贴图、邮票、手绘框记录每一餐，用双列贴图墙留住美味足迹。
+            </Text>
+            <DashedDivider />
+            <View style={styles.aboutRow}>
+              <Text style={styles.aboutKey}>版本</Text>
+              <Text style={styles.aboutVal}>v1.2.0 · 味笺</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={styles.aboutKey}>存储</Text>
+              <Text style={styles.aboutVal}>本地 SQLite · 仅存于本机</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={styles.aboutKey}>AI</Text>
+              <Text style={styles.aboutVal}>可选启用 · 识别美食 / 抠图 / 账单</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={styles.aboutKey}>隐私</Text>
+              <Text style={styles.aboutVal}>数据不会上传任何服务器</Text>
+            </View>
+          </PaperCard>
+
           {/* 落款 */}
           <View style={styles.about}>
-            <Stamp text="美食手账" size={64} />
-            <Text style={styles.aboutText}>美食记账 · 第一卷</Text>
+            <Stamp text="味笺" size={64} />
+            <Text style={styles.aboutText}>味笺 · 第一卷</Text>
             <Text style={styles.aboutVersion}>本地优先 · 数据仅存于本机</Text>
           </View>
         </View>
@@ -285,4 +313,28 @@ const styles = StyleSheet.create({
   about: { alignItems: 'center', paddingVertical: 28, gap: 8 },
   aboutText: { fontSize: 13, color: Colors.inkSoft, fontFamily: Fonts.serif },
   aboutVersion: { fontSize: 11, color: Colors.inkLight, fontStyle: 'italic' },
+  aboutIntro: {
+    fontSize: 12,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    lineHeight: 19,
+  },
+  aboutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    gap: 12,
+  },
+  aboutKey: {
+    fontSize: 12,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    width: 40,
+  },
+  aboutVal: {
+    fontSize: 12,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    flex: 1,
+  },
 });

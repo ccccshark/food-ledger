@@ -121,7 +121,7 @@ export async function recognizeFood(
   config: AiConfig,
   imageUri: string
 ): Promise<AiRecognizeResult> {
-  const prompt = `你是一个美食记账助手。请识别这张图片中的美食，返回严格的 JSON（不要其他文字）：
+  const prompt = `你是一个美食记账助手（味笺）。请识别这张图片中的美食，返回严格的 JSON（不要其他文字）：
 {
   "amount": 估算金额(数字，单位元，无法判断则省略字段),
   "meal": 餐次(从 breakfast/lunch/dinner/snack/supper 中选一个，根据食物类型和时段判断，无法判断则省略),

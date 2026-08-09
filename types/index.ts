@@ -16,6 +16,18 @@ export const PHOTO_STYLE_LABELS: Record<PhotoStyle, string> = {
   sketch: '手绘框',
 };
 
+// 照片裁切形状
+export type PhotoShape = 'square' | 'rounded' | 'circle' | 'heart';
+
+export const PHOTO_SHAPES: PhotoShape[] = ['square', 'rounded', 'circle', 'heart'];
+
+export const PHOTO_SHAPE_LABELS: Record<PhotoShape, string> = {
+  square: '方形',
+  rounded: '圆角',
+  circle: '圆形',
+  heart: '心形',
+};
+
 // 记账记录（注意：避免覆盖 TS 内置 Record 工具类型，命名为 LedgerRecord）
 export interface LedgerRecord {
   id: number;
@@ -32,6 +44,7 @@ export interface LedgerRecord {
   location_name?: string | null;   // 地点名称（手动输入或获取）
   rating?: number;                 // 0-5 评分，0 表示未评
   photo_style?: PhotoStyle;        // 照片展示风格
+  photo_shape?: PhotoShape;        // 照片裁切形状
 }
 
 // 新建记录入参
@@ -47,6 +60,7 @@ export interface RecordInput {
   location_name?: string | null;
   rating?: number;
   photo_style?: PhotoStyle;
+  photo_shape?: PhotoShape;
 }
 
 // 月度统计聚合

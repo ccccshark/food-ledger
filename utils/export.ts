@@ -56,7 +56,7 @@ export async function exportRecordsCsv(records: LedgerRecord[]): Promise<void> {
   }
   await Sharing.shareAsync(fileUri, {
     mimeType: 'text/csv',
-    dialogTitle: '导出美食记账数据',
+    dialogTitle: '导出味笺数据',
     UTI: 'public.comma-separated-values-text',
   });
 }

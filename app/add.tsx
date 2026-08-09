@@ -22,7 +22,7 @@ import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, Stamp } from '@/components/Decorations';
 import { StarRating } from '@/components/StarRating';
 import { PhotoPicker } from '@/components/PhotoPicker';
-import type { MealType, PhotoStyle } from '@/types';
+import type { MealType, PhotoStyle, PhotoShape } from '@/types';
 import { MEAL_ORDER, MEAL_LABELS } from '@/types';
 import * as dao from '@/db';
 import { getCurrentLocation, pickPhoto } from '@/utils/media';
@@ -57,6 +57,7 @@ export default function AddScreen() {
   // Phase 2 新增
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('polaroid');
+  const [photoShape, setPhotoShape] = useState<PhotoShape>('square');
   const [loc, setLoc] = useState<LocState | null>(null);
   const [locNameInput, setLocNameInput] = useState('');
   const [locLoading, setLocLoading] = useState(false);
@@ -80,6 +81,7 @@ export default function AddScreen() {
           setTags(r.tags ? r.tags.split(',').filter(Boolean) : []);
           setPhotoUri(r.photo_uri ?? null);
           setPhotoStyle(r.photo_style ?? 'polaroid');
+          setPhotoShape(r.photo_shape ?? 'square');
           setRating(r.rating ?? 0);
           if (r.latitude != null && r.longitude != null) {
             setLoc({
@@ -221,6 +223,7 @@ export default function AddScreen() {
       note: note.trim(),
       photo_uri: photoUri,
       photo_style: photoStyle,
+      photo_shape: photoShape,
       latitude: loc?.latitude ?? null,
       longitude: loc?.longitude ?? null,
       location_name: loc ? (finalLocName || null) : null,
@@ -444,6 +447,8 @@ export default function AddScreen() {
               onChange={setPhotoUri}
               style={photoStyle}
               onStyleChange={setPhotoStyle}
+              shape={photoShape}
+              onShapeChange={setPhotoShape}
               accent={activeMeal.color}
             />
 

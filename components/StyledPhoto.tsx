@@ -2,16 +2,19 @@ import React from 'react';
 import { StyleSheet, View, Image, ViewStyle } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { Tape } from './Decorations';
-import type { PhotoStyle } from '@/types';
+import { ShapeMask } from './ShapeMask';
+import type { PhotoStyle, PhotoShape } from '@/types';
 
 // 多风格照片框：根据 photoStyle 渲染不同手账风装饰
 // - polaroid: 拍立得（白边宽底，顶部小胶带）
 // - tape:     胶带贴图（四角彩色胶带，像贴在本子上）
 // - stamp:    邮票（虚线齿孔边框）
 // - sketch:   手绘框（双层虚线边框 + 四角小墨点）
+// shape 控制照片裁切形状：square/rounded/circle/heart
 export function StyledPhoto({
   uri,
   style = 'polaroid',
+  shape = 'square',
   height = 200,
   rotate = 0,
   accent = Colors.olive,
@@ -19,12 +22,17 @@ export function StyledPhoto({
 }: {
   uri: string;
   style?: PhotoStyle;
+  shape?: PhotoShape;
   height?: number;
   rotate?: number;
   accent?: string;
   containerStyle?: ViewStyle;
 }) {
-  const photo = <Image source={{ uri }} style={{ width: '100%', height, resizeMode: 'cover' }} />;
+  const photo = (
+    <ShapeMask shape={shape} height={height}>
+      <Image source={{ uri }} style={{ width: '100%', height, resizeMode: 'cover' }} />
+    </ShapeMask>
+  );
 
   let content: React.ReactNode;
 

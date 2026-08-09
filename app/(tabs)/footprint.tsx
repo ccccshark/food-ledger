@@ -31,6 +31,7 @@ export default function FootprintScreen() {
   const refreshAllRecords = useLedgerStore((s) => s.refreshAllRecords);
   const refreshLocations = useLedgerStore((s) => s.refreshLocations);
   const [refreshing, setRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<'wall' | 'timeline'>('wall');
 
   useEffect(() => {
     refreshAllRecords();
@@ -58,10 +59,23 @@ export default function FootprintScreen() {
     return { left, right };
   }, [allRecords]);
 
+  // 时间轴：按月份分组
+  const monthGroups = useMemo(() => {
+    const map = new Map<string, LedgerRecord[]>();
+    [...allRecords]
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .forEach((r) => {
+        const month = r.date.slice(0, 7);
+        if (!map.has(month)) map.set(month, []);
+        map.get(month)!.push(r);
+      });
+    return Array.from(map.entries()).map(([month, records]) => ({ month, records }));
+  }, [allRecords]);
+
   return (
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="美食足迹" date="贴图墙" />
+        <Header title="美食足迹" date={viewMode === 'wall' ? '贴图墙' : '时间轴'} />
         <ScrollView
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -93,12 +107,21 @@ export default function FootprintScreen() {
             </PaperCard>
           </View>
 
-          {/* 贴图墙标题 */}
+          {/* 视图切换 */}
           <View style={styles.px}>
-            <View style={styles.sectionTitleRow}>
-              <Tape color="yellow" width={16} height={10} rotate={-6} />
-              <Text style={styles.sectionTitle}>美食贴图墙</Text>
-              <Text style={styles.sectionSub}>点击可编辑</Text>
+            <View style={styles.switchRow}>
+              <SwitchBtn
+                icon="grid-outline"
+                label="贴图墙"
+                active={viewMode === 'wall'}
+                onPress={() => setViewMode('wall')}
+              />
+              <SwitchBtn
+                icon="git-branch-outline"
+                label="时间轴"
+                active={viewMode === 'timeline'}
+                onPress={() => setViewMode('timeline')}
+              />
             </View>
           </View>
 
@@ -110,19 +133,40 @@ export default function FootprintScreen() {
               actionLabel="去记一笔"
               onAction={() => router.push('/add')}
             />
-          ) : (
+          ) : viewMode === 'wall' ? (
             /* 贴图墙：双列瀑布流 */
-            <View style={styles.boardWrap}>
-              <View style={styles.column}>
-                {columns.left.map((r, i) => (
-                  <StickerCard key={r.id} record={r} index={i * 2} />
-                ))}
+            <>
+              <View style={styles.px}>
+                <View style={styles.sectionTitleRow}>
+                  <Tape color="yellow" width={16} height={10} rotate={-6} />
+                  <Text style={styles.sectionTitle}>美食贴图墙</Text>
+                  <Text style={styles.sectionSub}>点击可编辑</Text>
+                </View>
               </View>
-              <View style={styles.column}>
-                {columns.right.map((r, i) => (
-                  <StickerCard key={r.id} record={r} index={i * 2 + 1} />
-                ))}
+              <View style={styles.boardWrap}>
+                <View style={styles.column}>
+                  {columns.left.map((r, i) => (
+                    <StickerCard key={r.id} record={r} index={i * 2} />
+                  ))}
+                </View>
+                <View style={styles.column}>
+                  {columns.right.map((r, i) => (
+                    <StickerCard key={r.id} record={r} index={i * 2 + 1} />
+                  ))}
+                </View>
               </View>
+            </>
+          ) : (
+            /* 时间轴：旅行足迹线条 */
+            <View style={styles.px}>
+              <View style={styles.sectionTitleRow}>
+                <Tape color="green" width={16} height={10} rotate={-6} />
+                <Text style={styles.sectionTitle}>美味时间轴</Text>
+                <Text style={styles.sectionSub}>{monthGroups.length} 个月</Text>
+              </View>
+              {monthGroups.map((g) => (
+                <TimelineMonth key={g.month} month={g.month} records={g.records} />
+              ))}
             </View>
           )}
 
@@ -150,6 +194,107 @@ export default function FootprintScreen() {
         </ScrollView>
       </SafeAreaView>
     </PaperBackground>
+  );
+}
+
+// 视图切换按钮
+function SwitchBtn({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.switchBtn, active && styles.switchBtnActive]}
+      onPress={onPress}
+    >
+      <Ionicons name={icon} size={15} color={active ? Colors.note : Colors.inkSoft} />
+      <Text style={[styles.switchBtnText, active && styles.switchBtnTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// 时间轴：单月组（左侧竖线 + 节点卡片）
+function TimelineMonth({
+  month,
+  records,
+}: {
+  month: string;
+  records: LedgerRecord[];
+}) {
+  const [y, m] = month.split('-').map(Number);
+  const monthTotal = records.reduce((s, r) => s + r.amount, 0);
+  return (
+    <View style={styles.timelineMonth}>
+      {/* 月份标题 */}
+      <View style={styles.timelineMonthHead}>
+        <View style={styles.timelineMonthNode} />
+        <Text style={styles.timelineMonthTitle}>
+          {toCNNumber(y)}年{toCNNumber(m)}月
+        </Text>
+        <Text style={styles.timelineMonthMeta}>
+          {records.length} 笔 · {formatMoney(monthTotal)}
+        </Text>
+      </View>
+      {/* 节点列表 */}
+      <View style={styles.timelineList}>
+        {records.map((r, i) => (
+          <TimelineNode key={r.id} record={r} last={i === records.length - 1} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// 时间轴节点
+function TimelineNode({ record, last }: { record: LedgerRecord; last: boolean }) {
+  const meal = Meals[record.meal as MealType];
+  const [, m, d] = record.date.split('-').map(Number);
+  return (
+    <View style={styles.timelineNodeRow}>
+      {/* 左侧连线 + 节点 */}
+      <View style={styles.timelineRail}>
+        <View style={[styles.timelineDot, { backgroundColor: meal.color }]} />
+        {!last ? <View style={styles.timelineLine} /> : null}
+      </View>
+      {/* 右侧内容卡 */}
+      <TouchableOpacity
+        style={styles.timelineCard}
+        activeOpacity={0.85}
+        onPress={() => router.push({ pathname: '/add', params: { id: String(record.id) } })}
+      >
+        {record.photo_uri ? (
+          <StyledPhoto
+            uri={record.photo_uri}
+            style={record.photo_style ?? 'polaroid'}
+            shape={record.photo_shape ?? 'square'}
+            height={80}
+            accent={meal.color}
+          />
+        ) : null}
+        <View style={styles.timelineCardInfo}>
+          <View style={styles.timelineCardTop}>
+            <Text style={styles.timelineCardAmount}>¥{record.amount.toFixed(0)}</Text>
+            <View style={[styles.timelineMealChip, { borderColor: meal.color }]}>
+              <Text style={[styles.timelineMealText, { color: meal.color }]}>{meal.label}</Text>
+            </View>
+          </View>
+          <Text style={styles.timelineCardDate}>
+            {toCNNumber(m)}月{toCNNumber(d)}日
+            {record.location_name ? ` · ${record.location_name}` : ''}
+          </Text>
+          {record.note ? (
+            <Text style={styles.timelineCardNote} numberOfLines={1}>{record.note}</Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -181,6 +326,7 @@ function StickerCard({ record, index }: { record: LedgerRecord; index: number })
           <StyledPhoto
             uri={record.photo_uri}
             style={record.photo_style ?? 'polaroid'}
+            shape={record.photo_shape ?? 'square'}
             height={CARD_WIDTH * 0.85}
             accent={meal.color}
           />
@@ -293,6 +439,150 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionSub: { fontSize: 11, color: Colors.inkLight, fontStyle: 'italic' },
+
+  // 视图切换
+  switchRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
+  },
+  switchBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 4,
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    borderColor: Colors.line,
+    backgroundColor: Colors.paperLight,
+  },
+  switchBtnActive: {
+    borderColor: Colors.ink,
+    backgroundColor: Colors.ink,
+    borderStyle: 'solid',
+  },
+  switchBtnText: {
+    fontSize: 13,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+  },
+  switchBtnTextActive: {
+    color: Colors.note,
+    fontWeight: '700',
+  },
+
+  // 时间轴
+  timelineMonth: {
+    marginBottom: 18,
+  },
+  timelineMonthHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  timelineMonthNode: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.olive,
+    backgroundColor: Colors.note,
+  },
+  timelineMonthTitle: {
+    fontSize: 15,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+    letterSpacing: 1,
+  },
+  timelineMonthMeta: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontStyle: 'italic',
+  },
+  timelineList: {
+    paddingLeft: 4,
+  },
+  timelineNodeRow: {
+    flexDirection: 'row',
+    minHeight: 60,
+  },
+  timelineRail: {
+    width: 24,
+    alignItems: 'center',
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 18,
+    borderWidth: 2,
+    borderColor: Colors.note,
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: Colors.line,
+    marginTop: 2,
+    opacity: 0.6,
+  },
+  timelineCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.note,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(61,46,31,0.12)',
+    padding: 10,
+    marginBottom: 10,
+    marginLeft: 6,
+  },
+  timelineCardInfo: {
+    flex: 1,
+  },
+  timelineCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timelineCardAmount: {
+    fontSize: 16,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+  },
+  timelineMealChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 2,
+    borderWidth: 0.8,
+    borderStyle: 'dashed',
+    backgroundColor: Colors.paperLight,
+  },
+  timelineMealText: {
+    fontSize: 10,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+  },
+  timelineCardDate: {
+    fontSize: 11,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    marginTop: 3,
+  },
+  timelineCardNote: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
 
   // 贴图墙
   boardWrap: {

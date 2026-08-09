@@ -79,7 +79,7 @@ export default function HomeScreen() {
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <Header title="美食手账" date={cnDate} />
+          <Header title="味笺" date={cnDate} />
 
           {/* 今日卡片：像贴在牛皮纸上的一页日记 */}
           <View style={styles.todayWrap}>

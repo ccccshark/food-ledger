@@ -69,6 +69,13 @@ export function DrawingCanvas({
   const canvasWidth = Dimensions.get('window').width - 36;
   const canvasHeight = 320;
 
+  // 用 ref 保存最新值，避免 PanResponder 闭包捕获旧值导致无法绘制
+  const colorRef = useRef(color);
+  const brushRef = useRef(brush);
+  const currentRef = useRef<Stroke | null>(null);
+  colorRef.current = color;
+  brushRef.current = brush;
+
   // PanResponder：在画布内绘制
   const panResponder = useRef(
     PanResponder.create({
@@ -76,32 +83,41 @@ export function DrawingCanvas({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
-        setCurrentStroke({
-          color,
-          width: brush,
-          points: [{ x: locationX, y: locationY }],
-        });
+        const x = Math.max(0, Math.min(canvasWidth, locationX));
+        const y = Math.max(0, Math.min(canvasHeight, locationY));
+        const stroke: Stroke = {
+          color: colorRef.current,
+          width: brushRef.current,
+          points: [{ x, y }],
+        };
+        currentRef.current = stroke;
+        setCurrentStroke(stroke);
       },
-      onPanResponderMove: (evt, gestureState) => {
-        if (!currentStroke) return;
-        // locationX/Y 在 move 时不可靠，用 moveX/moveY 减去画布偏移
+      onPanResponderMove: (evt) => {
+        const cur = currentRef.current;
+        if (!cur) return;
         const { locationX, locationY } = evt.nativeEvent;
-        setCurrentStroke((prev) => {
-          if (!prev) return prev;
-          // 限制在画布范围内
-          const x = Math.max(0, Math.min(canvasWidth, locationX));
-          const y = Math.max(0, Math.min(canvasHeight, locationY));
-          return { ...prev, points: [...prev.points, { x, y }] };
-        });
-        void gestureState;
+        const x = Math.max(0, Math.min(canvasWidth, locationX));
+        const y = Math.max(0, Math.min(canvasHeight, locationY));
+        const next: Stroke = { ...cur, points: [...cur.points, { x, y }] };
+        currentRef.current = next;
+        setCurrentStroke(next);
       },
       onPanResponderRelease: () => {
-        setCurrentStroke((prev) => {
-          if (prev && prev.points.length > 0) {
-            setStrokes((all) => [...all, prev]);
-          }
-          return null;
-        });
+        const cur = currentRef.current;
+        if (cur && cur.points.length > 0) {
+          setStrokes((all) => [...all, cur]);
+        }
+        currentRef.current = null;
+        setCurrentStroke(null);
+      },
+      onPanResponderTerminate: () => {
+        const cur = currentRef.current;
+        if (cur && cur.points.length > 0) {
+          setStrokes((all) => [...all, cur]);
+        }
+        currentRef.current = null;
+        setCurrentStroke(null);
       },
     })
   ).current;
