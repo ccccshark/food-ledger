@@ -11,6 +11,9 @@ import {
   Keyboard,
   Pressable,
   ActivityIndicator,
+  Modal,
+  FlatList,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -22,11 +25,17 @@ import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, Stamp } from '@/components/Decorations';
 import { StarRating } from '@/components/StarRating';
 import { PhotoPicker } from '@/components/PhotoPicker';
+import { StickerLibrary, BUILTIN_STICKERS, type StickerItem } from '@/components/StickerLibrary';
 import type { MealType, PhotoStyle, PhotoShape } from '@/types';
 import { MEAL_ORDER, MEAL_LABELS } from '@/types';
 import * as dao from '@/db';
-import { getCurrentLocation, pickPhoto } from '@/utils/media';
+import { getCurrentLocation, pickPhoto, pickMultiPhotos } from '@/utils/media';
 import { recognizeFood, ocrReceipt, describeResult, AiRecognizeResult } from '@/services/ai';
+import {
+  TEMPLATES_BY_MEAL,
+  guessMealByHour,
+  type FoodTemplate,
+} from '@/services/quick-templates';
 
 const PRESET_TAGS = ['外卖', '堂食', '家常菜', '奶茶', '咖啡', '水果', '零食', '聚餐'];
 
@@ -58,6 +67,7 @@ export default function AddScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('polaroid');
   const [photoShape, setPhotoShape] = useState<PhotoShape>('square');
+  const [photosExtra, setPhotosExtra] = useState<string[]>([]);
   const [loc, setLoc] = useState<LocState | null>(null);
   const [locNameInput, setLocNameInput] = useState('');
   const [locLoading, setLocLoading] = useState(false);
@@ -67,6 +77,17 @@ export default function AddScreen() {
   const aiConfig = useLedgerStore((s) => s.aiConfig);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMode, setAiMode] = useState<'food' | 'receipt' | null>(null);
+
+  // 速记模板（AI 平替）
+  const [tplVisible, setTplVisible] = useState(false);
+  const [tplMeal, setTplMeal] = useState<MealType>(guessMealByHour());
+
+  // 贴纸库
+  const [stickerLibVisible, setStickerLibVisible] = useState(false);
+  const [pastedStickers, setPastedStickers] = useState<StickerItem[]>([]);
+  const diyStickers = useLedgerStore((s) => s.diyStickers);
+  const refreshDiyStickers = useLedgerStore((s) => s.refreshDiyStickers);
+  const addDiySticker = useLedgerStore((s) => s.addDiySticker);
 
   useEffect(() => {
     if (params.id) {
@@ -82,7 +103,17 @@ export default function AddScreen() {
           setPhotoUri(r.photo_uri ?? null);
           setPhotoStyle(r.photo_style ?? 'polaroid');
           setPhotoShape(r.photo_shape ?? 'square');
+          setPhotosExtra(r.photos_extra ?? []);
           setRating(r.rating ?? 0);
+          // 还原已贴贴纸
+          if (r.stickers) {
+            try {
+              const saved: StickerItem[] = JSON.parse(r.stickers);
+              if (Array.isArray(saved)) setPastedStickers(saved);
+            } catch {
+              /* ignore */
+            }
+          }
           if (r.latitude != null && r.longitude != null) {
             setLoc({
               latitude: r.latitude,
@@ -107,6 +138,7 @@ export default function AddScreen() {
   useEffect(() => {
     refreshTags();
     refreshAiConfig();
+    refreshDiyStickers();
   }, []);
 
   const suggestions = useMemo(
@@ -202,6 +234,25 @@ export default function AddScreen() {
     if (r.rating && mode === 'food') setRating(r.rating);
   };
 
+  // 速记模板：一键填表（无需 API）
+  const openTemplates = () => {
+    setTplMeal(guessMealByHour());
+    setTplVisible(true);
+  };
+
+  const applyTemplate = (t: FoodTemplate) => {
+    setAmount(String(t.amount));
+    setMeal(t.meal);
+    setNote(t.name);
+    setTags((prev) => Array.from(new Set([...prev, ...t.tags])));
+    setTplVisible(false);
+    showDialog({
+      title: '已填入',
+      message: `${t.name} · ¥${t.amount.toFixed(2)}\n可继续修改金额、地点等`,
+      icon: 'checkmark-circle-outline',
+    });
+  };
+
   const onSave = async () => {
     if (navigatingAway.current) return;
     const value = parseFloat(amount);
@@ -224,6 +275,8 @@ export default function AddScreen() {
       photo_uri: photoUri,
       photo_style: photoStyle,
       photo_shape: photoShape,
+      photos_extra: photosExtra,
+      stickers: pastedStickers.length ? JSON.stringify(pastedStickers) : null,
       latitude: loc?.latitude ?? null,
       longitude: loc?.longitude ?? null,
       location_name: loc ? (finalLocName || null) : null,
@@ -321,31 +374,40 @@ export default function AddScreen() {
             contentContainerStyle={{ paddingBottom: 100 }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* AI 工具条 */}
-            {aiConfig.enabled ? (
-              <View style={styles.aiBar}>
-                <TouchableOpacity
-                  style={[styles.aiBtn, aiLoading && aiMode === 'food' && styles.aiBtnActive]}
-                  onPress={() => onAiRecognize('food')}
-                  disabled={aiLoading}
-                >
-                  {aiLoading && aiMode === 'food' ? (
-                    <ActivityIndicator size="small" color={Colors.note} />
-                  ) : (
-                    <Ionicons name="sparkles" size={16} color={Colors.note} />
-                  )}
-                  <Text style={styles.aiBtnText}>AI 识别美食</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.aiBtn2, aiLoading && aiMode === 'receipt' && styles.aiBtn2Active]}
-                  onPress={() => onAiRecognize('receipt')}
-                  disabled={aiLoading}
-                >
-                  <Ionicons name="receipt" size={16} color={Colors.olive} />
-                  <Text style={styles.aiBtn2Text}>账单 OCR</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
+            {/* 速记 / AI 工具条（速记模板无需配置，AI 需在设置中启用） */}
+            <View style={styles.aiBar}>
+              <TouchableOpacity
+                style={styles.tplBtn}
+                onPress={openTemplates}
+              >
+                <Ionicons name="bookmark-outline" size={16} color={Colors.ochre} />
+                <Text style={styles.tplBtnText}>速记模板</Text>
+              </TouchableOpacity>
+              {aiConfig.enabled ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.aiBtn, aiLoading && aiMode === 'food' && styles.aiBtnActive]}
+                    onPress={() => onAiRecognize('food')}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading && aiMode === 'food' ? (
+                      <ActivityIndicator size="small" color={Colors.note} />
+                    ) : (
+                      <Ionicons name="sparkles" size={16} color={Colors.note} />
+                    )}
+                    <Text style={styles.aiBtnText}>AI 识别</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.aiBtn2, aiLoading && aiMode === 'receipt' && styles.aiBtn2Active]}
+                    onPress={() => onAiRecognize('receipt')}
+                    disabled={aiLoading}
+                  >
+                    <Ionicons name="receipt" size={16} color={Colors.olive} />
+                    <Text style={styles.aiBtn2Text}>账单 OCR</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
+            </View>
 
             {/* 金额纸条 */}
             <PaperCard tape="yellow" rotate={0} padding={18} style={styles.amountCard}>
@@ -440,8 +502,8 @@ export default function AddScreen() {
               })}
             </View>
 
-            {/* 照片 */}
-            <FieldLabel label="美食照片" />
+            {/* 照片（支持多图） */}
+            <FieldLabel label="美食照片（支持多图）" />
             <PhotoPicker
               uri={photoUri}
               onChange={setPhotoUri}
@@ -450,6 +512,12 @@ export default function AddScreen() {
               shape={photoShape}
               onShapeChange={setPhotoShape}
               accent={activeMeal.color}
+            />
+            {/* 附加照片缩略条 */}
+            <ExtraPhotosBar
+              photos={photosExtra}
+              accent={activeMeal.color}
+              onChange={setPhotosExtra}
             />
 
             {/* 地点 */}
@@ -554,20 +622,67 @@ export default function AddScreen() {
               </View>
             </PaperCard>
 
-            {/* 备注 */}
-            <FieldLabel label="备注" />
-            <PaperCard tape="blue" rotate={0} padding={0} showTape={false}>
+            {/* 备注（手写风格） */}
+            <FieldLabel label="手写备注" />
+            <PaperCard tape="pink" rotate={0} padding={0} showTape>
               <View style={styles.noteBox}>
+                <View style={styles.noteHeaderRow}>
+                  <Ionicons name="create-outline" size={13} color={Colors.ochre} />
+                  <Text style={styles.noteHeaderHint}>菜品 · 口味 · 探店感受</Text>
+                </View>
+                <View style={styles.noteLinesBg}>
+                  {[0, 1, 2, 3].map((i) => (
+                    <View key={i} style={styles.noteLine} />
+                  ))}
+                </View>
                 <TextInput
                   style={styles.noteInput}
-                  placeholder="吃了什么？和谁？心情如何？"
+                  placeholder="今天这顿…记录你的味笺"
                   placeholderTextColor={Colors.inkLight}
                   value={note}
                   onChangeText={setNote}
                   multiline
                   maxLength={200}
                 />
+                <View style={styles.noteFooterRow}>
+                  <Text style={styles.noteCounter}>{note.length}/200</Text>
+                </View>
               </View>
+            </PaperCard>
+
+            {/* 贴纸库 */}
+            <FieldLabel label="贴纸标签（线条 / 分割线 / DIY）" />
+            <PaperCard tape="green" rotate={0} padding={12} showTape>
+              <TouchableOpacity
+                style={styles.stickerOpenBtn}
+                onPress={() => setStickerLibVisible(true)}
+              >
+                <Ionicons name="happy-outline" size={16} color={Colors.olive} />
+                <Text style={styles.stickerOpenText}>打开贴纸库</Text>
+                <Ionicons name="chevron-forward" size={14} color={Colors.inkLight} />
+              </TouchableOpacity>
+              {pastedStickers.length > 0 ? (
+                <View style={styles.pastedRow}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {pastedStickers.map((s, i) => (
+                      <View key={`${s.id}-${i}`} style={styles.pastedChip}>
+                        {s.uri ? (
+                          <Image source={{ uri: s.uri }} style={styles.pastedDiyImg} resizeMode="contain" />
+                        ) : (
+                          <View style={styles.pastedSvgWrap}>{s.svg}</View>
+                        )}
+                        <TouchableOpacity
+                          style={styles.pastedRemove}
+                          onPress={() => setPastedStickers((prev) => prev.filter((_, idx) => idx !== i))}
+                        >
+                          <Ionicons name="close-circle" size={16} color={Colors.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                  <Text style={styles.pastedHint}>已贴 {pastedStickers.length} 个</Text>
+                </View>
+              ) : null}
             </PaperCard>
           </ScrollView>
 
@@ -589,6 +704,73 @@ export default function AddScreen() {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
+
+        {/* 速记模板弹层（AI 平替，无需 API） */}
+        <Modal visible={tplVisible} transparent animationType="slide" onRequestClose={() => setTplVisible(false)}>
+          <Pressable style={styles.tplOverlay} onPress={() => setTplVisible(false)}>
+            <Pressable style={styles.tplSheet} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.tplHeader}>
+                <Text style={styles.tplTitle}>速记模板</Text>
+                <TouchableOpacity onPress={() => setTplVisible(false)}>
+                  <Ionicons name="close" size={22} color={Colors.ink} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.tplHint}>点选一项即可快速填表，无需配置 AI</Text>
+
+              {/* 餐次切换 */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tplMealRow}>
+                {MEAL_ORDER.map((mt) => {
+                  const m = Meals[mt];
+                  const active = tplMeal === mt;
+                  return (
+                    <TouchableOpacity
+                      key={mt}
+                      style={[styles.tplMealChip, active && { backgroundColor: m.color, borderColor: m.color }]}
+                      onPress={() => setTplMeal(mt)}
+                    >
+                      <Text style={[styles.tplMealChipText, active && { color: Colors.note }]}>
+                        {m.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* 模板网格 */}
+              <FlatList
+                data={TEMPLATES_BY_MEAL[tplMeal]}
+                keyExtractor={(item) => item.key}
+                numColumns={2}
+                scrollEnabled={false}
+                contentContainerStyle={styles.tplGrid}
+                renderItem={({ item }) => {
+                  const m = Meals[item.meal];
+                  return (
+                    <TouchableOpacity
+                      style={[styles.tplCard, { borderColor: m.color + '55' }]}
+                      onPress={() => applyTemplate(item)}
+                    >
+                      <View style={[styles.tplCardIcon, { backgroundColor: m.color + '18' }]}>
+                        <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={22} color={m.color} />
+                      </View>
+                      <Text style={styles.tplCardName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.tplCardAmount}>¥{item.amount.toFixed(0)}</Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        {/* 贴纸库弹层 */}
+        <StickerLibrary
+          visible={stickerLibVisible}
+          onClose={() => setStickerLibVisible(false)}
+          onPick={(s) => setPastedStickers((prev) => [...prev, s])}
+          diyStickers={diyStickers.map((d) => ({ id: d.id, kind: 'diy' as const, label: d.label, uri: d.uri }))}
+          onAddDiy={(s) => addDiySticker({ id: s.id, label: s.label, uri: s.uri! })}
+        />
       </SafeAreaView>
     </PaperBackground>
   );
@@ -599,6 +781,69 @@ function FieldLabel({ label }: { label: string }) {
     <View style={styles.fieldLabelRow}>
       <Tape color="green" width={12} height={8} rotate={-6} />
       <Text style={styles.fieldLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// 附加照片缩略条：管理多图（首图为 PhotoPicker 封面，此处为额外图）
+function ExtraPhotosBar({
+  photos,
+  accent,
+  onChange,
+}: {
+  photos: string[];
+  accent: string;
+  onChange: (next: string[]) => void;
+}) {
+  const onAdd = async () => {
+    if (photos.length >= 6) {
+      showDialog({
+        title: '提示',
+        message: '附加照片最多 6 张',
+        icon: 'alert-circle-outline',
+      });
+      return;
+    }
+    const uris = await pickMultiPhotos(6 - photos.length);
+    if (uris.length) {
+      onChange([...photos, ...uris]);
+    }
+  };
+
+  const onRemove = (i: number) => {
+    onChange(photos.filter((_, idx) => idx !== i));
+  };
+
+  if (photos.length === 0) {
+    return (
+      <TouchableOpacity style={styles.extraAddBtn} onPress={onAdd}>
+        <Ionicons name="add-circle-outline" size={16} color={accent} />
+        <Text style={[styles.extraAddText, { color: accent }]}>添加更多照片（拍立得白边）</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={styles.extraBar}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.extraScroll}>
+        {photos.map((u, i) => (
+          <View key={u} style={styles.polaroidThumb}>
+            <View style={styles.polaroidThumbInner}>
+              <Image source={{ uri: u }} style={styles.polaroidThumbImg} />
+            </View>
+            <View style={styles.polaroidThumbBottom} />
+            <TouchableOpacity style={styles.polaroidThumbRemove} onPress={() => onRemove(i)}>
+              <Ionicons name="close-circle" size={18} color={Colors.danger} />
+            </TouchableOpacity>
+          </View>
+        ))}
+        {photos.length < 6 ? (
+          <TouchableOpacity style={styles.extraAddSquare} onPress={onAdd}>
+            <Ionicons name="add" size={22} color={Colors.inkLight} />
+            <Text style={styles.extraAddSquareText}>加图</Text>
+          </TouchableOpacity>
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
@@ -705,6 +950,113 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.serif,
     fontWeight: '600',
     letterSpacing: 1,
+  },
+  tplBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 4,
+    backgroundColor: Colors.ochre + '22',
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    borderColor: Colors.ochre,
+  },
+  tplBtnText: {
+    color: Colors.ochre,
+    fontSize: 13,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  // 速记模板弹层
+  tplOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(40,30,20,0.5)',
+    justifyContent: 'flex-end',
+  },
+  tplSheet: {
+    backgroundColor: Colors.note,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 30,
+    maxHeight: '75%',
+  },
+  tplHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  tplTitle: {
+    fontSize: 17,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+    letterSpacing: 2,
+  },
+  tplHint: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  tplMealRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  tplMealChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 4,
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    borderColor: Colors.line,
+    backgroundColor: Colors.paperLight,
+    marginRight: 8,
+  },
+  tplMealChipText: {
+    fontSize: 12,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+    color: Colors.inkSoft,
+  },
+  tplGrid: {
+    gap: 10,
+  },
+  tplCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginHorizontal: 5,
+    borderRadius: 6,
+    borderWidth: 1.2,
+    backgroundColor: Colors.paperLight,
+    gap: 6,
+  },
+  tplCardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tplCardName: {
+    fontSize: 13,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+  },
+  tplCardAmount: {
+    fontSize: 12,
+    color: Colors.stamp,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
   },
   amountHead: {
     flexDirection: 'row',
@@ -851,15 +1203,191 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noteBox: { position: 'relative', minHeight: 90 },
-  noteInput: {
-    padding: 12,
-    fontSize: 14,
-    color: Colors.ink,
+  noteBox: { position: 'relative', minHeight: 110, padding: 12 },
+  noteHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  noteHeaderHint: {
+    fontSize: 11,
+    color: Colors.ochre,
     fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+  },
+  noteLinesBg: {
+    position: 'absolute',
+    top: 38,
+    left: 12,
+    right: 12,
+    bottom: 30,
+  },
+  noteLine: {
+    height: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.lineSoft,
+    marginVertical: 11,
+    opacity: 0.6,
+  },
+  noteFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 2,
+  },
+  noteCounter: {
+    fontSize: 10,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+  },
+  noteInput: {
+    padding: 0,
+    fontSize: 15,
+    color: Colors.ink,
+    fontFamily: Fonts.hand,
     textAlignVertical: 'top',
-    minHeight: 90,
+    minHeight: 96,
     lineHeight: 24,
+    zIndex: 2,
+  },
+  // 附加照片缩略条
+  extraAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 11,
+    borderRadius: 4,
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    backgroundColor: Colors.paperLight,
+  },
+  extraAddText: {
+    fontSize: 12,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+  },
+  extraBar: {
+    marginTop: 10,
+  },
+  extraScroll: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  polaroidThumb: {
+    position: 'relative',
+    backgroundColor: Colors.note,
+    padding: 4,
+    paddingBottom: 12,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(61,46,31,0.15)',
+    shadowColor: '#3D2E1F',
+    shadowOffset: { width: 1, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  polaroidThumbInner: {
+    width: 64,
+    height: 64,
+    overflow: 'hidden',
+  },
+  polaroidThumbImg: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  polaroidThumbBottom: {
+    height: 8,
+  },
+  polaroidThumbRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: Colors.note,
+    borderRadius: 9,
+    zIndex: 3,
+  },
+  extraAddSquare: {
+    width: 72,
+    height: 80,
+    borderRadius: 3,
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    borderColor: Colors.line,
+    backgroundColor: Colors.paperLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  extraAddSquareText: {
+    fontSize: 10,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+  },
+  // 贴纸库入口
+  stickerOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    borderColor: Colors.olive,
+    backgroundColor: Colors.paperLight,
+  },
+  stickerOpenText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: Colors.olive,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+  },
+  pastedRow: {
+    marginTop: 10,
+    gap: 6,
+  },
+  pastedChip: {
+    position: 'relative',
+    marginRight: 10,
+    padding: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.line,
+    backgroundColor: Colors.note,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pastedSvgWrap: {
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pastedDiyImg: {
+    width: 40,
+    height: 40,
+  },
+  pastedRemove: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: Colors.note,
+    borderRadius: 8,
+    zIndex: 3,
+  },
+  pastedHint: {
+    fontSize: 10,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   footer: {
     flexDirection: 'row',

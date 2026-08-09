@@ -24,6 +24,7 @@ interface LedgerState {
   existingTags: string[];
   locations: LocationAgg[];
   aiConfig: AiConfig;
+  diyStickers: { id: string; label: string; uri: string }[];
 
   // 选中状态
   currentMonth: string; // YYYY-MM
@@ -41,6 +42,8 @@ interface LedgerState {
   refreshMonthCalendar: (month?: string) => Promise<void>;
   refreshAiConfig: () => Promise<void>;
   setAiConfig: (cfg: AiConfig) => Promise<void>;
+  refreshDiyStickers: () => Promise<void>;
+  addDiySticker: (s: { id: string; label: string; uri: string }) => Promise<void>;
   setCurrentMonth: (m: string) => void;
   addRecord: (input: RecordInput) => Promise<number>;
   updateRecord: (id: number, input: RecordInput) => Promise<void>;
@@ -73,6 +76,7 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
   existingTags: [],
   locations: [],
   aiConfig: DEFAULT_AI_CONFIG,
+  diyStickers: [],
   currentMonth: currentMonthStr(),
   currentDate: todayStr(),
 
@@ -148,6 +152,28 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
   setAiConfig: async (cfg) => {
     await dao.setSetting('aiConfig', JSON.stringify(cfg));
     set({ aiConfig: cfg });
+  },
+
+  refreshDiyStickers: async () => {
+    const raw = await dao.getSetting('diyStickers');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          set({ diyStickers: parsed });
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    set({ diyStickers: [] });
+  },
+
+  addDiySticker: async (s) => {
+    const next = [...get().diyStickers, s];
+    await dao.setSetting('diyStickers', JSON.stringify(next));
+    set({ diyStickers: next });
   },
 
   setCurrentMonth: (m) => set({ currentMonth: m }),

@@ -351,25 +351,29 @@ function StickerCollage({ record, fields, bg }: { record: LedgerRecord; fields: 
   return (
     <View style={styles.wrap}>
       <View style={[styles.stickerCardBig, { backgroundColor: cardBg, borderColor: meal.color }]}>
-        <View style={styles.stickerCircleWrap}>
-          {fields.photo && record.photo_uri ? (
-            <View style={[styles.stickerCircle, { borderColor: meal.color }]}>
-              <Image source={{ uri: record.photo_uri }} style={styles.stickerCircleImg} />
-            </View>
-          ) : (
-            <View style={[styles.stickerCircle, { borderColor: meal.color, backgroundColor: meal.color + '20' }]}>
-              <Ionicons name="restaurant" size={40} color={meal.color} />
-            </View>
-          )}
-        </View>
+        {fields.photo ? (
+          <View style={styles.stickerCircleWrap}>
+            {record.photo_uri ? (
+              <View style={[styles.stickerCircle, { borderColor: meal.color }]}>
+                <Image source={{ uri: record.photo_uri }} style={styles.stickerCircleImg} />
+              </View>
+            ) : (
+              <View style={[styles.stickerCircle, { borderColor: meal.color, backgroundColor: meal.color + '20' }]}>
+                <Ionicons name="restaurant" size={40} color={meal.color} />
+              </View>
+            )}
+          </View>
+        ) : null}
 
         {fields.amount ? (
           <Text style={[styles.stickerBigAmount, { color: textColor }]}>{formatMoney(record.amount)}</Text>
         ) : null}
 
-        <View style={[styles.stickerLabelChip, { borderColor: meal.color, backgroundColor: meal.color + '20' }]}>
-          <Text style={[styles.stickerLabelText, { color: meal.color }]}>{meal.label}</Text>
-        </View>
+        {fields.meal ? (
+          <View style={[styles.stickerLabelChip, { borderColor: meal.color, backgroundColor: meal.color + '20' }]}>
+            <Text style={[styles.stickerLabelText, { color: meal.color }]}>{meal.label}</Text>
+          </View>
+        ) : null}
 
         {fields.date ? (
           <Text style={[styles.stickerDateText, { color: subColor }]}>

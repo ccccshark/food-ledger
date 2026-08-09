@@ -20,10 +20,19 @@ import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, InkDot } from '@/components/Decorations';
 import { StyledPhoto } from '@/components/StyledPhoto';
 import type { LedgerRecord, MealType, LocationAgg } from '@/types';
+import Svg, { Path as SvgPath, Circle as SvgCircle } from 'react-native-svg';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 // 贴纸卡片宽度（2 列，扣除间距和边距）
 const CARD_WIDTH = (SCREEN_WIDTH - 18 * 2 - 12) / 2;
+
+// 时间轴旅行足迹参数
+const TIMELINE_PAD = 12;                       // 时间轴左右内边距
+const TIMELINE_W = SCREEN_WIDTH - TIMELINE_PAD * 2;
+const TIMELINE_CX = TIMELINE_W / 2;            // 弯曲路径中线 x
+const TIMELINE_ROW_H = 112;                    // 每个节点行高
+const TIMELINE_BULGE = 16;                     // 路径弯曲幅度
+const TIMELINE_CARD_GAP = 24;                  // 节点与卡片的间距
 
 export default function FootprintScreen() {
   const allRecords = useLedgerStore((s) => s.allRecords);
@@ -157,11 +166,11 @@ export default function FootprintScreen() {
               </View>
             </>
           ) : (
-            /* 时间轴：旅行足迹线条 */
-            <View style={styles.px}>
+            /* 时间轴：旅行足迹弯曲路径 */
+            <View style={styles.timelineWrap}>
               <View style={styles.sectionTitleRow}>
                 <Tape color="green" width={16} height={10} rotate={-6} />
-                <Text style={styles.sectionTitle}>美味时间轴</Text>
+                <Text style={styles.sectionTitle}>美味足迹</Text>
                 <Text style={styles.sectionSub}>{monthGroups.length} 个月</Text>
               </View>
               {monthGroups.map((g) => (
@@ -220,7 +229,7 @@ function SwitchBtn({
   );
 }
 
-// 时间轴：单月组（左侧竖线 + 节点卡片）
+// 时间轴：单月组（旅行足迹弯曲路径 + 交替卡片）
 function TimelineMonth({
   month,
   records,
@@ -230,71 +239,137 @@ function TimelineMonth({
 }) {
   const [y, m] = month.split('-').map(Number);
   const monthTotal = records.reduce((s, r) => s + r.amount, 0);
+  const pathH = records.length * TIMELINE_ROW_H;
+
+  // 构造弯曲路径：从中线起点出发，每个节点向左右交替弯曲
+  let d = `M ${TIMELINE_CX} 0`;
+  records.forEach((_, i) => {
+    const side = i % 2 === 0 ? -1 : 1; // -1 左侧，+1 右侧
+    const midY = i * TIMELINE_ROW_H + TIMELINE_ROW_H / 2;
+    const endY = (i + 1) * TIMELINE_ROW_H;
+    const bx = TIMELINE_CX + side * TIMELINE_BULGE;
+    d += ` C ${bx} ${midY - 42}, ${bx} ${midY + 42}, ${TIMELINE_CX} ${endY}`;
+  });
+
+  const cardW = TIMELINE_CX - TIMELINE_CARD_GAP;
+
   return (
     <View style={styles.timelineMonth}>
-      {/* 月份标题 */}
-      <View style={styles.timelineMonthHead}>
-        <View style={styles.timelineMonthNode} />
-        <Text style={styles.timelineMonthTitle}>
-          {toCNNumber(y)}年{toCNNumber(m)}月
-        </Text>
-        <Text style={styles.timelineMonthMeta}>
-          {records.length} 笔 · {formatMoney(monthTotal)}
-        </Text>
+      {/* 月份里程碑（旗帜样式） */}
+      <View style={styles.monthMilestone}>
+        <View style={styles.monthFlagPole} />
+        <View style={[styles.monthFlag, { backgroundColor: Colors.olive }]}>
+          <Ionicons name="flag" size={11} color={Colors.note} />
+          <Text style={styles.monthFlagText}>
+            {toCNNumber(y)}年{toCNNumber(m)}月
+          </Text>
+        </View>
+        <View style={styles.monthMetaChip}>
+          <Text style={styles.monthMetaText}>
+            {records.length} 笔 · {formatMoney(monthTotal)}
+          </Text>
+        </View>
       </View>
-      {/* 节点列表 */}
-      <View style={styles.timelineList}>
-        {records.map((r, i) => (
-          <TimelineNode key={r.id} record={r} last={i === records.length - 1} />
-        ))}
+
+      {/* 弯曲路径 + 交替节点卡片 */}
+      <View style={[styles.pathContainer, { width: TIMELINE_W, height: pathH }]}>
+        <Svg width={TIMELINE_W} height={pathH} style={StyleSheet.absoluteFill}>
+          <SvgPath
+            d={d}
+            fill="none"
+            stroke={Colors.dotted}
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            strokeLinecap="round"
+          />
+          {records.map((r, i) => {
+            const side = i % 2 === 0 ? -1 : 1;
+            const midY = i * TIMELINE_ROW_H + TIMELINE_ROW_H / 2;
+            const meal = Meals[r.meal as MealType];
+            const bx = TIMELINE_CX + side * TIMELINE_BULGE;
+            return (
+              <SvgCircle
+                key={`dot-${r.id}`}
+                cx={bx}
+                cy={midY}
+                r={6}
+                fill={meal.color}
+                stroke={Colors.note}
+                strokeWidth={2}
+              />
+            );
+          })}
+        </Svg>
+
+        {records.map((r, i) => {
+          const side = i % 2 === 0 ? -1 : 1; // -1 卡片在左，+1 卡片在右
+          const top = i * TIMELINE_ROW_H;
+          const left = side === -1 ? 0 : TIMELINE_CX + TIMELINE_CARD_GAP;
+          return (
+            <View
+              key={`card-${r.id}`}
+              style={{
+                position: 'absolute',
+                top,
+                left,
+                width: cardW,
+                height: TIMELINE_ROW_H - 12,
+                justifyContent: 'center',
+              }}
+            >
+              <TimelineCard record={r} side={side} />
+            </View>
+          );
+        })}
       </View>
     </View>
   );
 }
 
-// 时间轴节点
-function TimelineNode({ record, last }: { record: LedgerRecord; last: boolean }) {
+// 时间轴节点卡片（紧凑型，左右交替）
+function TimelineCard({ record, side }: { record: LedgerRecord; side: -1 | 1 }) {
   const meal = Meals[record.meal as MealType];
   const [, m, d] = record.date.split('-').map(Number);
   return (
-    <View style={styles.timelineNodeRow}>
-      {/* 左侧连线 + 节点 */}
-      <View style={styles.timelineRail}>
-        <View style={[styles.timelineDot, { backgroundColor: meal.color }]} />
-        {!last ? <View style={styles.timelineLine} /> : null}
-      </View>
-      {/* 右侧内容卡 */}
-      <TouchableOpacity
-        style={styles.timelineCard}
-        activeOpacity={0.85}
-        onPress={() => router.push({ pathname: '/add', params: { id: String(record.id) } })}
-      >
-        {record.photo_uri ? (
-          <StyledPhoto
-            uri={record.photo_uri}
-            style={record.photo_style ?? 'polaroid'}
-            shape={record.photo_shape ?? 'square'}
-            height={80}
-            accent={meal.color}
-          />
-        ) : null}
-        <View style={styles.timelineCardInfo}>
-          <View style={styles.timelineCardTop}>
-            <Text style={styles.timelineCardAmount}>¥{record.amount.toFixed(0)}</Text>
-            <View style={[styles.timelineMealChip, { borderColor: meal.color }]}>
-              <Text style={[styles.timelineMealText, { color: meal.color }]}>{meal.label}</Text>
-            </View>
-          </View>
-          <Text style={styles.timelineCardDate}>
-            {toCNNumber(m)}月{toCNNumber(d)}日
-            {record.location_name ? ` · ${record.location_name}` : ''}
-          </Text>
-          {record.note ? (
-            <Text style={styles.timelineCardNote} numberOfLines={1}>{record.note}</Text>
-          ) : null}
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() =>
+        router.push({ pathname: '/add', params: { id: String(record.id) } })
+      }
+      style={[
+        styles.tcCard,
+        { borderColor: meal.color + '55', flexDirection: side === -1 ? 'row' : 'row-reverse' },
+      ]}
+    >
+      {record.photo_uri ? (
+        <StyledPhoto
+          uri={record.photo_uri}
+          style={record.photo_style ?? 'polaroid'}
+          shape={record.photo_shape ?? 'square'}
+          height={56}
+          accent={meal.color}
+        />
+      ) : (
+        <View style={[styles.tcPhotoPh, { backgroundColor: meal.color + '18' }]}>
+          <Ionicons name="restaurant" size={22} color={meal.color} />
         </View>
-      </TouchableOpacity>
-    </View>
+      )}
+      <View style={styles.tcInfo}>
+        <View style={styles.tcTop}>
+          <Text style={styles.tcAmount}>¥{record.amount.toFixed(0)}</Text>
+          <View style={[styles.tcMeal, { borderColor: meal.color }]}>
+            <Text style={[styles.tcMealText, { color: meal.color }]}>{meal.label}</Text>
+          </View>
+        </View>
+        <Text style={styles.tcDate} numberOfLines={1}>
+          {toCNNumber(m)}月{toCNNumber(d)}日
+          {record.location_name ? ` · ${record.location_name}` : ''}
+        </Text>
+        {record.note ? (
+          <Text style={styles.tcNote} numberOfLines={1}>{record.note}</Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -475,113 +550,123 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // 时间轴
-  timelineMonth: {
-    marginBottom: 18,
+  // 时间轴（旅行足迹弯曲路径）
+  timelineWrap: {
+    paddingHorizontal: TIMELINE_PAD,
+    marginBottom: 12,
   },
-  timelineMonthHead: {
+  timelineMonth: {
+    marginBottom: 8,
+  },
+  monthMilestone: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 6,
+    paddingLeft: 2,
   },
-  timelineMonthNode: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: Colors.olive,
-    backgroundColor: Colors.note,
+  monthFlagPole: {
+    width: 2,
+    height: 22,
+    backgroundColor: Colors.inkLight,
+    opacity: 0.6,
+    marginLeft: 4,
   },
-  timelineMonthTitle: {
-    fontSize: 15,
+  monthFlag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomRightRadius: 10,
+    borderTopRightRadius: 2,
+    borderTopLeftRadius: 2,
+    marginLeft: -2,
+  },
+  monthFlagText: {
+    fontSize: 12,
     fontFamily: Fonts.serif,
     fontWeight: '700',
-    color: Colors.ink,
+    color: Colors.note,
     letterSpacing: 1,
   },
-  timelineMonthMeta: {
-    fontSize: 11,
-    color: Colors.inkLight,
+  monthMetaChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.line,
+    backgroundColor: Colors.paperLight,
+  },
+  monthMetaText: {
+    fontSize: 10,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
     fontStyle: 'italic',
   },
-  timelineList: {
-    paddingLeft: 4,
+  pathContainer: {
+    position: 'relative',
   },
-  timelineNodeRow: {
-    flexDirection: 'row',
-    minHeight: 60,
-  },
-  timelineRail: {
-    width: 24,
+  tcCard: {
     alignItems: 'center',
-  },
-  timelineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 18,
-    borderWidth: 2,
-    borderColor: Colors.note,
-  },
-  timelineLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: Colors.line,
-    marginTop: 2,
-    opacity: 0.6,
-  },
-  timelineCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    gap: 8,
     backgroundColor: Colors.note,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: 'rgba(61,46,31,0.12)',
-    padding: 10,
-    marginBottom: 10,
-    marginLeft: 6,
+    padding: 8,
+    shadowColor: '#3D2E1F',
+    shadowOffset: { width: 1, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  timelineCardInfo: {
+  tcPhotoPh: {
+    width: 56,
+    height: 56,
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tcInfo: {
     flex: 1,
   },
-  timelineCardTop: {
+  tcTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 4,
   },
-  timelineCardAmount: {
-    fontSize: 16,
+  tcAmount: {
+    fontSize: 14,
     fontFamily: Fonts.serif,
     fontWeight: '700',
     color: Colors.ink,
   },
-  timelineMealChip: {
-    paddingHorizontal: 6,
+  tcMeal: {
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 2,
     borderWidth: 0.8,
     borderStyle: 'dashed',
     backgroundColor: Colors.paperLight,
   },
-  timelineMealText: {
-    fontSize: 10,
+  tcMealText: {
+    fontSize: 9,
     fontFamily: Fonts.serif,
     fontWeight: '600',
   },
-  timelineCardDate: {
-    fontSize: 11,
+  tcDate: {
+    fontSize: 10,
     color: Colors.inkSoft,
     fontFamily: Fonts.serif,
-    marginTop: 3,
+    marginTop: 2,
   },
-  timelineCardNote: {
-    fontSize: 11,
+  tcNote: {
+    fontSize: 10,
     color: Colors.inkLight,
     fontStyle: 'italic',
-    marginTop: 2,
+    marginTop: 1,
   },
 
   // 贴图墙

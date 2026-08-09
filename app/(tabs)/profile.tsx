@@ -16,7 +16,7 @@ import { Header } from '@/components/Header';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, Stamp } from '@/components/Decorations';
 import * as dao from '@/db';
-import { exportRecordsCsv } from '@/utils/export';
+import { exportRecordsCsv, backupSqlite, exportJournalHtml } from '@/utils/export';
 
 export default function ProfileScreen() {
   const budget = useLedgerStore((s) => s.budget);
@@ -26,7 +26,7 @@ export default function ProfileScreen() {
   const aiConfig = useLedgerStore((s) => s.aiConfig);
   const refreshAiConfig = useLedgerStore((s) => s.refreshAiConfig);
 
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<null | 'csv' | 'pdf' | 'db'>(null);
 
   useEffect(() => {
     refreshBudget();
@@ -37,19 +37,32 @@ export default function ProfileScreen() {
   const totalAll = monthlyTotals.reduce((s, m) => s + m.total, 0);
   const totalMonths = monthlyTotals.length;
 
-  const onExport = async () => {
-    setExporting(true);
+  const runExport = async (
+    kind: 'csv' | 'pdf' | 'db',
+    fn: () => Promise<void>,
+    needRecords = false
+  ) => {
+    if (exporting) return;
+    setExporting(kind);
     try {
-      const all = await dao.listAllRecords();
-      if (all.length === 0) {
-        showDialog({
-          title: '提示',
-          message: '还没有任何记录可以导出',
-          icon: 'alert-circle-outline',
-        });
-        return;
+      if (needRecords) {
+        const all = await dao.listAllRecords();
+        if (all.length === 0) {
+          showDialog({
+            title: '提示',
+            message: '还没有任何记录可以导出',
+            icon: 'alert-circle-outline',
+          });
+          return;
+        }
+        if (kind === 'csv') {
+          await exportRecordsCsv(all);
+        } else {
+          await exportJournalHtml(all);
+        }
+      } else {
+        await fn();
       }
-      await exportRecordsCsv(all);
     } catch (e: any) {
       showDialog({
         title: '导出失败',
@@ -57,9 +70,13 @@ export default function ProfileScreen() {
         icon: 'alert-circle-outline',
       });
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
+
+  const onExportCsv = () => runExport('csv', () => exportRecordsCsv([]), true);
+  const onExportPdf = () => runExport('pdf', () => exportJournalHtml([]), true);
+  const onBackupDb = () => runExport('db', () => backupSqlite(), false);
 
   const onOpenBudget = () => {
     showDialog({
@@ -184,21 +201,67 @@ export default function ProfileScreen() {
               <Tape color="blue" width={14} height={9} rotate={-6} />
               <Text style={styles.cardTitle}>数据管理</Text>
             </View>
+
+            {/* CSV 账单表格 */}
             <TouchableOpacity
-              style={styles.rowBtn}
-              onPress={onExport}
-              disabled={exporting}
+              style={[styles.rowBtn, styles.exportRow]}
+              onPress={onExportCsv}
+              disabled={exporting !== null}
             >
               <View style={[styles.iconBox, { borderColor: Colors.olive }]}>
-                {exporting ? (
+                {exporting === 'csv' ? (
                   <ActivityIndicator size="small" color={Colors.olive} />
                 ) : (
-                  <Ionicons name="download-outline" size={18} color={Colors.olive} />
+                  <Ionicons name="grid-outline" size={18} color={Colors.olive} />
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>导出 CSV</Text>
-                <Text style={styles.rowHint}>导出全部记录到文件</Text>
+                <Text style={styles.rowTitle}>导出 CSV 账单</Text>
+                <Text style={styles.rowHint}>表格形式 · 可用 Excel 打开</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+
+            <DashedDivider />
+
+            {/* PDF 手帐 */}
+            <TouchableOpacity
+              style={[styles.rowBtn, styles.exportRow]}
+              onPress={onExportPdf}
+              disabled={exporting !== null}
+            >
+              <View style={[styles.iconBox, { borderColor: Colors.stamp }]}>
+                {exporting === 'pdf' ? (
+                  <ActivityIndicator size="small" color={Colors.stamp} />
+                ) : (
+                  <Ionicons name="book-outline" size={18} color={Colors.stamp} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>导出 PDF 手帐</Text>
+                <Text style={styles.rowHint}>按月汇总 · 浏览器打印为 PDF</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+
+            <DashedDivider />
+
+            {/* SQLite 整库备份 */}
+            <TouchableOpacity
+              style={[styles.rowBtn, styles.exportRow]}
+              onPress={onBackupDb}
+              disabled={exporting !== null}
+            >
+              <View style={[styles.iconBox, { borderColor: Colors.ochre }]}>
+                {exporting === 'db' ? (
+                  <ActivityIndicator size="small" color={Colors.ochre} />
+                ) : (
+                  <Ionicons name="server-outline" size={18} color={Colors.ochre} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>本地数据库备份</Text>
+                <Text style={styles.rowHint}>SQLite 整库 · 可用于恢复</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
             </TouchableOpacity>
@@ -216,7 +279,7 @@ export default function ProfileScreen() {
             <DashedDivider />
             <View style={styles.aboutRow}>
               <Text style={styles.aboutKey}>版本</Text>
-              <Text style={styles.aboutVal}>v1.2.0 · 味笺</Text>
+              <Text style={styles.aboutVal}>v1.3.0 · 味笺</Text>
             </View>
             <View style={styles.aboutRow}>
               <Text style={styles.aboutKey}>存储</Text>
@@ -251,6 +314,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  exportRow: {
+    paddingVertical: 4,
   },
   iconBox: {
     width: 34,

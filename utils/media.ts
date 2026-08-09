@@ -27,6 +27,30 @@ export async function pickPhoto(): Promise<string | null> {
 }
 
 /**
+ * 多选照片：从相册批量选取（最多 limit 张），自动缩小后持久化保存。
+ */
+export async function pickMultiPhotos(limit = 6): Promise<string[]> {
+  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) return [];
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsMultipleSelection: true,
+    selectionLimit: limit,
+    quality: 0.7,
+  });
+
+  if (result.canceled || !result.assets?.length) return [];
+
+  const uris: string[] = [];
+  for (const a of result.assets) {
+    const u = await persistImage(a.uri);
+    uris.push(u);
+  }
+  return uris;
+}
+
+/**
  * 拍照
  */
 export async function takePhoto(): Promise<string | null> {

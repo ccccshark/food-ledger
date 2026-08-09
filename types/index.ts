@@ -45,6 +45,8 @@ export interface LedgerRecord {
   rating?: number;                 // 0-5 评分，0 表示未评
   photo_style?: PhotoStyle;        // 照片展示风格
   photo_shape?: PhotoShape;        // 照片裁切形状
+  photos_extra?: string[];         // 附加照片 URI（photo_uri 为封面/首图）
+  stickers?: string;               // 已贴的贴纸 JSON（DIY/线条贴纸）
 }
 
 // 新建记录入参
@@ -61,6 +63,8 @@ export interface RecordInput {
   rating?: number;
   photo_style?: PhotoStyle;
   photo_shape?: PhotoShape;
+  photos_extra?: string[];
+  stickers?: string | null;
 }
 
 // 月度统计聚合

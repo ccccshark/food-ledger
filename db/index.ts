@@ -62,6 +62,8 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     { col: 'rating', sql: `ALTER TABLE records ADD COLUMN rating INTEGER DEFAULT 0` },
     { col: 'photo_style', sql: `ALTER TABLE records ADD COLUMN photo_style TEXT DEFAULT 'polaroid'` },
     { col: 'photo_shape', sql: `ALTER TABLE records ADD COLUMN photo_shape TEXT DEFAULT 'square'` },
+    { col: 'photos_extra', sql: `ALTER TABLE records ADD COLUMN photos_extra TEXT DEFAULT '[]'` },
+    { col: 'stickers', sql: `ALTER TABLE records ADD COLUMN stickers TEXT` },
   ];
 
   for (const a of additions) {
@@ -79,6 +81,13 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
 // ---------- 记录 CRUD ----------
 
 function mapRow(r: any): LedgerRecord {
+  let photosExtra: string[] = [];
+  try {
+    const parsed = r.photos_extra ? JSON.parse(r.photos_extra) : [];
+    if (Array.isArray(parsed)) photosExtra = parsed.filter((x: unknown) => typeof x === 'string');
+  } catch {
+    photosExtra = [];
+  }
   return {
     ...r,
     photo_uri: r.photo_uri ?? null,
@@ -88,6 +97,8 @@ function mapRow(r: any): LedgerRecord {
     rating: r.rating ?? 0,
     photo_style: (r.photo_style as PhotoStyle) ?? 'polaroid',
     photo_shape: (r.photo_shape as PhotoShape) ?? 'square',
+    photos_extra: photosExtra,
+    stickers: r.stickers ?? null,
   };
 }
 
@@ -96,8 +107,8 @@ export async function insertRecord(input: RecordInput): Promise<number> {
   const now = Date.now();
   const result = await db.runAsync(
     `INSERT INTO records
-      (amount, meal, tags, date, note, created_at, photo_uri, latitude, longitude, location_name, rating, photo_style, photo_shape)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (amount, meal, tags, date, note, created_at, photo_uri, latitude, longitude, location_name, rating, photo_style, photo_shape, photos_extra, stickers)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.amount,
       input.meal,
@@ -112,6 +123,8 @@ export async function insertRecord(input: RecordInput): Promise<number> {
       input.rating ?? 0,
       input.photo_style ?? 'polaroid',
       input.photo_shape ?? 'square',
+      JSON.stringify(input.photos_extra ?? []),
+      input.stickers ?? null,
     ]
   );
   return result.lastInsertRowId as number;
@@ -121,22 +134,45 @@ export async function updateRecord(id: number, input: RecordInput): Promise<void
   const db = await getDb();
   // 若更换或清空了照片，删除旧照片文件避免残留
   if (input.photo_uri !== undefined) {
-    const old = await db.getFirstAsync<{ photo_uri: string | null }>(
-      `SELECT photo_uri FROM records WHERE id = ?`,
+    const old = await db.getFirstAsync<{ photo_uri: string | null; photos_extra: string | null }>(
+      `SELECT photo_uri, photos_extra FROM records WHERE id = ?`,
       [id]
     );
+    // 旧封面被替换：删除
     if (old?.photo_uri && old.photo_uri !== input.photo_uri) {
+      // 旧封面若不在新集合中，则删除文件
+      const newAll = [input.photo_uri, ...(input.photos_extra ?? [])];
+      if (!newAll.includes(old.photo_uri)) {
+        try {
+          await FileSystem.deleteAsync(old.photo_uri, { idempotent: true });
+        } catch {
+          /* 忽略 */
+        }
+      }
+    }
+    // 旧附加图被移除：删除
+    if (old?.photos_extra) {
       try {
-        await FileSystem.deleteAsync(old.photo_uri, { idempotent: true });
+        const oldExtras: string[] = JSON.parse(old.photos_extra);
+        const newAll = [input.photo_uri, ...(input.photos_extra ?? [])];
+        for (const u of oldExtras) {
+          if (!newAll.includes(u)) {
+            try {
+              await FileSystem.deleteAsync(u, { idempotent: true });
+            } catch {
+              /* 忽略 */
+            }
+          }
+        }
       } catch {
-        /* 忽略文件删除失败 */
+        /* 解析失败忽略 */
       }
     }
   }
   await db.runAsync(
     `UPDATE records SET
       amount = ?, meal = ?, tags = ?, date = ?, note = ?,
-      photo_uri = ?, latitude = ?, longitude = ?, location_name = ?, rating = ?, photo_style = ?, photo_shape = ?
+      photo_uri = ?, latitude = ?, longitude = ?, location_name = ?, rating = ?, photo_style = ?, photo_shape = ?, photos_extra = ?, stickers = ?
      WHERE id = ?`,
     [
       input.amount,
@@ -151,6 +187,8 @@ export async function updateRecord(id: number, input: RecordInput): Promise<void
       input.rating ?? 0,
       input.photo_style ?? 'polaroid',
       input.photo_shape ?? 'square',
+      JSON.stringify(input.photos_extra ?? []),
+      input.stickers ?? null,
       id,
     ]
   );
@@ -158,14 +196,24 @@ export async function updateRecord(id: number, input: RecordInput): Promise<void
 
 export async function deleteRecord(id: number): Promise<void> {
   const db = await getDb();
-  // 删除关联照片文件
-  const row = await db.getFirstAsync<{ photo_uri: string | null }>(
-    `SELECT photo_uri FROM records WHERE id = ?`,
+  // 删除关联照片文件（封面 + 附加图）
+  const row = await db.getFirstAsync<{ photo_uri: string | null; photos_extra: string | null }>(
+    `SELECT photo_uri, photos_extra FROM records WHERE id = ?`,
     [id]
   );
-  if (row?.photo_uri) {
+  const toDelete: string[] = [];
+  if (row?.photo_uri) toDelete.push(row.photo_uri);
+  if (row?.photos_extra) {
     try {
-      await FileSystem.deleteAsync(row.photo_uri, { idempotent: true });
+      const extras: string[] = JSON.parse(row.photos_extra);
+      toDelete.push(...extras);
+    } catch {
+      /* 忽略 */
+    }
+  }
+  for (const u of toDelete) {
+    try {
+      await FileSystem.deleteAsync(u, { idempotent: true });
     } catch {
       /* 忽略文件删除失败 */
     }

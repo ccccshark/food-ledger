@@ -133,8 +133,58 @@ export default function AiSettingsScreen() {
               </View>
               <Text style={styles.desc}>
                 采用 OpenAI 兼容协议，支持 OpenAI / 智谱 GLM-4V / 通义千问 VL 等。
-                配置后可在记账页用「AI 识别」自动填金额、餐次、标签。
+                配置后可在记账页用「AI 识别」拍照自动填金额、餐次、标签。
                 所有配置仅存于本机。
+              </Text>
+            </PaperCard>
+          </View>
+
+          {/* 平替方案：速记模板 */}
+          <View style={styles.px}>
+            <PaperCard tape="yellow" rotate={0} padding={14} showTape>
+              <View style={styles.cardTitleRow}>
+                <Ionicons name="bookmark-outline" size={16} color={Colors.ochre} />
+                <Text style={styles.cardTitle}>不想配置？用速记模板</Text>
+              </View>
+              <Text style={styles.desc}>
+                记账页顶部的「速记模板」无需任何 API，点选常见美食即可一键填表
+                （金额、餐次、备注、标签自动带入，可再修改）。适合不想折腾配置的用户。
+              </Text>
+              <TouchableOpacity
+                style={styles.guideCta}
+                onPress={() => router.push('/add')}
+              >
+                <Ionicons name="pencil-outline" size={14} color={Colors.note} />
+                <Text style={styles.guideCtaText}>去试试速记模板</Text>
+              </TouchableOpacity>
+            </PaperCard>
+          </View>
+
+          {/* 配置引导（新手必看） */}
+          <View style={styles.px}>
+            <PaperCard tape="blue" rotate={0} padding={14} showTape>
+              <View style={styles.cardTitleRow}>
+                <Ionicons name="book-outline" size={16} color={Colors.olive} />
+                <Text style={styles.cardTitle}>配置引导（推荐智谱 GLM-4V）</Text>
+              </View>
+              <Text style={styles.stepText}>
+                <Text style={styles.stepNum}>1.</Text> 点击下方「智谱 GLM-4V」按钮，自动填好地址和模型名。
+              </Text>
+              <Text style={styles.stepText}>
+                <Text style={styles.stepNum}>2.</Text> 浏览器打开{' '}
+                <Text style={styles.linkText}>open.bigmodel.cn</Text>，注册/登录智谱开放平台。
+              </Text>
+              <Text style={styles.stepText}>
+                <Text style={styles.stepNum}>3.</Text> 进入「API Keys」页面，点击「添加新的 API Key」，复制生成的密钥（以 xxxxxx 开头）。
+              </Text>
+              <Text style={styles.stepText}>
+                <Text style={styles.stepNum}>4.</Text> 把密钥粘贴到下方「API Key」输入框。
+              </Text>
+              <Text style={styles.stepText}>
+                <Text style={styles.stepNum}>5.</Text> 打开上方「启用 AI 识别」开关，点「测试识别」选张美食图验证，成功后「保存」即可。
+              </Text>
+              <Text style={styles.tipText}>
+                提示：智谱新用户有免费额度，足够日常记账使用；OpenAI / 通义千问配置方式类似，先选对应预设再填各自的 Key。
               </Text>
             </PaperCard>
           </View>
@@ -145,7 +195,7 @@ export default function AiSettingsScreen() {
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.switchTitle}>启用 AI 识别</Text>
-                  <Text style={styles.switchHint}>关闭后记账页不显示 AI 入口</Text>
+                  <Text style={styles.switchHint}>关闭后记账页不显示 AI 入口（速记模板仍可用）</Text>
                 </View>
                 <Switch
                   value={enabled}
@@ -166,18 +216,18 @@ export default function AiSettingsScreen() {
 
               <DashedDivider />
 
-              <Text style={styles.presetTitle}>常用配置示例：</Text>
-              <PresetButton label="OpenAI" desc="gpt-4o · api.openai.com" onPress={() => {
-                setBaseUrl('https://api.openai.com/v1');
-                setModel('gpt-4o');
-              }} />
-              <PresetButton label="智谱 GLM-4V" desc="glm-4v · open.bigmodel.cn" onPress={() => {
+              <Text style={styles.presetTitle}>常用配置示例（点选自动填入）：</Text>
+              <PresetButton label="智谱 GLM-4V（推荐）" desc="glm-4v · open.bigmodel.cn" onPress={() => {
                 setBaseUrl('https://open.bigmodel.cn/api/paas/v4');
                 setModel('glm-4v');
               }} />
-              <PresetButton label="通义千问" desc="qwen-vl-max · dashscope.aliyuncs.com" onPress={() => {
+              <PresetButton label="通义千问 VL" desc="qwen-vl-max · dashscope.aliyuncs.com" onPress={() => {
                 setBaseUrl('https://dashscope.aliyuncs.com/compatible-mode/v1');
                 setModel('qwen-vl-max');
+              }} />
+              <PresetButton label="OpenAI" desc="gpt-4o · api.openai.com" onPress={() => {
+                setBaseUrl('https://api.openai.com/v1');
+                setModel('gpt-4o');
               }} />
             </PaperCard>
           </View>
@@ -272,6 +322,50 @@ const styles = StyleSheet.create({
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   cardTitle: { fontSize: 14, fontFamily: Fonts.serif, fontWeight: '700', color: Colors.ink },
   desc: { fontSize: 12, color: Colors.inkSoft, fontFamily: Fonts.serif, lineHeight: 18 },
+  guideCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 9,
+    borderRadius: 4,
+    backgroundColor: Colors.ochre,
+  },
+  guideCtaText: {
+    color: Colors.note,
+    fontSize: 13,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  stepText: {
+    fontSize: 12,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    lineHeight: 19,
+    marginBottom: 4,
+  },
+  stepNum: {
+    color: Colors.olive,
+    fontWeight: '700',
+  },
+  linkText: {
+    color: Colors.stamp,
+    fontStyle: 'italic',
+  },
+  tipText: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    lineHeight: 17,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.line,
+    borderStyle: 'dashed',
+  },
   switchRow: { flexDirection: 'row', alignItems: 'center' },
   switchTitle: { fontSize: 14, fontFamily: Fonts.serif, fontWeight: '600', color: Colors.ink },
   switchHint: { fontSize: 11, color: Colors.inkLight, marginTop: 2, fontStyle: 'italic' },
