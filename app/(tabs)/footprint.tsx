@@ -18,6 +18,7 @@ import { Header } from '@/components/Header';
 import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, InkDot } from '@/components/Decorations';
+import { StyledPhoto } from '@/components/StyledPhoto';
 import type { LedgerRecord, MealType, LocationAgg } from '@/types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -177,7 +178,12 @@ function StickerCard({ record, index }: { record: LedgerRecord; index: number })
       {/* 照片区 / 占位区 */}
       <View style={styles.stickerPhotoBox}>
         {record.photo_uri ? (
-          <Image source={{ uri: record.photo_uri }} style={styles.stickerPhoto} />
+          <StyledPhoto
+            uri={record.photo_uri}
+            style={record.photo_style ?? 'polaroid'}
+            height={CARD_WIDTH * 0.85}
+            accent={meal.color}
+          />
         ) : (
           <View style={[styles.stickerPlaceholder, { backgroundColor: meal.color + '18' }]}>
             <Ionicons name="restaurant" size={32} color={meal.color} />
@@ -306,7 +312,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     borderWidth: 1,
     borderColor: 'rgba(61,46,31,0.12)',
-    overflow: 'hidden',
+    overflow: 'visible',
     shadowColor: '#3D2E1F',
     shadowOffset: { width: 1, height: 2 },
     shadowOpacity: 0.18,
@@ -323,13 +329,15 @@ const styles = StyleSheet.create({
   },
   stickerPhotoBox: {
     width: '100%',
-    height: CARD_WIDTH * 0.85,
     backgroundColor: Colors.paperLight,
+    overflow: 'hidden',
   },
-  stickerPhoto: { width: '100%', height: '100%' },
+  stickerPhotoBoxPad: {
+    padding: 8,
+  },
   stickerPlaceholder: {
     width: '100%',
-    height: '100%',
+    height: CARD_WIDTH * 0.85,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,

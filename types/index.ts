@@ -4,6 +4,18 @@ export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'supper';
 // 用餐场景（Phase 2 用，先定义）
 export type SceneType = 'dineIn' | 'takeout' | 'home' | 'gathering';
 
+// 美食照片展示风格
+export type PhotoStyle = 'polaroid' | 'tape' | 'stamp' | 'sketch';
+
+export const PHOTO_STYLES: PhotoStyle[] = ['polaroid', 'tape', 'stamp', 'sketch'];
+
+export const PHOTO_STYLE_LABELS: Record<PhotoStyle, string> = {
+  polaroid: '拍立得',
+  tape: '胶带贴图',
+  stamp: '邮票',
+  sketch: '手绘框',
+};
+
 // 记账记录（注意：避免覆盖 TS 内置 Record 工具类型，命名为 LedgerRecord）
 export interface LedgerRecord {
   id: number;
@@ -19,6 +31,7 @@ export interface LedgerRecord {
   longitude?: number | null;       // 经度
   location_name?: string | null;   // 地点名称（手动输入或获取）
   rating?: number;                 // 0-5 评分，0 表示未评
+  photo_style?: PhotoStyle;        // 照片展示风格
 }
 
 // 新建记录入参
@@ -33,6 +46,7 @@ export interface RecordInput {
   longitude?: number | null;
   location_name?: string | null;
   rating?: number;
+  photo_style?: PhotoStyle;
 }
 
 // 月度统计聚合

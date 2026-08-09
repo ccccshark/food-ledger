@@ -7,6 +7,7 @@ import type {
   DaySummary,
   MealType,
   LocationAgg,
+  PhotoStyle,
 } from '@/types';
 import { MEAL_ORDER } from '@/types';
 
@@ -58,6 +59,7 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     { col: 'longitude', sql: `ALTER TABLE records ADD COLUMN longitude REAL` },
     { col: 'location_name', sql: `ALTER TABLE records ADD COLUMN location_name TEXT` },
     { col: 'rating', sql: `ALTER TABLE records ADD COLUMN rating INTEGER DEFAULT 0` },
+    { col: 'photo_style', sql: `ALTER TABLE records ADD COLUMN photo_style TEXT DEFAULT 'polaroid'` },
   ];
 
   for (const a of additions) {
@@ -82,6 +84,7 @@ function mapRow(r: any): LedgerRecord {
     longitude: r.longitude ?? null,
     location_name: r.location_name ?? null,
     rating: r.rating ?? 0,
+    photo_style: (r.photo_style as PhotoStyle) ?? 'polaroid',
   };
 }
 
@@ -90,8 +93,8 @@ export async function insertRecord(input: RecordInput): Promise<number> {
   const now = Date.now();
   const result = await db.runAsync(
     `INSERT INTO records
-      (amount, meal, tags, date, note, created_at, photo_uri, latitude, longitude, location_name, rating)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (amount, meal, tags, date, note, created_at, photo_uri, latitude, longitude, location_name, rating, photo_style)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.amount,
       input.meal,
@@ -104,6 +107,7 @@ export async function insertRecord(input: RecordInput): Promise<number> {
       input.longitude ?? null,
       input.location_name ?? null,
       input.rating ?? 0,
+      input.photo_style ?? 'polaroid',
     ]
   );
   return result.lastInsertRowId as number;
@@ -128,7 +132,7 @@ export async function updateRecord(id: number, input: RecordInput): Promise<void
   await db.runAsync(
     `UPDATE records SET
       amount = ?, meal = ?, tags = ?, date = ?, note = ?,
-      photo_uri = ?, latitude = ?, longitude = ?, location_name = ?, rating = ?
+      photo_uri = ?, latitude = ?, longitude = ?, location_name = ?, rating = ?, photo_style = ?
      WHERE id = ?`,
     [
       input.amount,
@@ -141,6 +145,7 @@ export async function updateRecord(id: number, input: RecordInput): Promise<void
       input.longitude ?? null,
       input.location_name ?? null,
       input.rating ?? 0,
+      input.photo_style ?? 'polaroid',
       id,
     ]
   );

@@ -22,7 +22,7 @@ import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, Stamp } from '@/components/Decorations';
 import { StarRating } from '@/components/StarRating';
 import { PhotoPicker } from '@/components/PhotoPicker';
-import type { MealType } from '@/types';
+import type { MealType, PhotoStyle } from '@/types';
 import { MEAL_ORDER, MEAL_LABELS } from '@/types';
 import * as dao from '@/db';
 import { getCurrentLocation, pickPhoto } from '@/utils/media';
@@ -56,6 +56,7 @@ export default function AddScreen() {
 
   // Phase 2 新增
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoStyle, setPhotoStyle] = useState<PhotoStyle>('polaroid');
   const [loc, setLoc] = useState<LocState | null>(null);
   const [locNameInput, setLocNameInput] = useState('');
   const [locLoading, setLocLoading] = useState(false);
@@ -78,6 +79,7 @@ export default function AddScreen() {
           setNote(r.note);
           setTags(r.tags ? r.tags.split(',').filter(Boolean) : []);
           setPhotoUri(r.photo_uri ?? null);
+          setPhotoStyle(r.photo_style ?? 'polaroid');
           setRating(r.rating ?? 0);
           if (r.latitude != null && r.longitude != null) {
             setLoc({
@@ -218,6 +220,7 @@ export default function AddScreen() {
       date,
       note: note.trim(),
       photo_uri: photoUri,
+      photo_style: photoStyle,
       latitude: loc?.latitude ?? null,
       longitude: loc?.longitude ?? null,
       location_name: loc ? (finalLocName || null) : null,
@@ -436,7 +439,13 @@ export default function AddScreen() {
 
             {/* 照片 */}
             <FieldLabel label="美食照片" />
-            <PhotoPicker uri={photoUri} onChange={setPhotoUri} />
+            <PhotoPicker
+              uri={photoUri}
+              onChange={setPhotoUri}
+              style={photoStyle}
+              onStyleChange={setPhotoStyle}
+              accent={activeMeal.color}
+            />
 
             {/* 地点 */}
             <FieldLabel label="用餐地点" />
