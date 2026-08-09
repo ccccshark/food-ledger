@@ -1,0 +1,20 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.DS_Store
+ios/
+android/
+.env
+.env.local
+
+# EAS
+.easignore
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+*.iml
