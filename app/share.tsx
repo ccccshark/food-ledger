@@ -5,7 +5,6 @@ import {
   View,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,7 @@ import { Colors, Fonts, formatMoney } from '@/constants/theme';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape } from '@/components/Decorations';
 import { ShareCollage } from '@/components/ShareCollage';
+import { showDialog } from '@/stores/dialog';
 import * as dao from '@/db';
 import type { LedgerRecord } from '@/types';
 
@@ -53,7 +53,11 @@ export default function ShareScreen() {
         // 兜底：保存到相册目录并提示路径
         const dest = `${FileSystem.documentDirectory}share_${Date.now()}.png`;
         await FileSystem.copyAsync({ from: uri, to: dest });
-        Alert.alert('已生成', `分享不可用，图片已保存：\n${dest}`);
+        showDialog({
+          title: '已生成',
+          message: `分享不可用，图片已保存至：\n${dest}`,
+          icon: 'checkmark-circle-outline',
+        });
         return;
       }
 
@@ -63,7 +67,11 @@ export default function ShareScreen() {
         UTI: 'public.image',
       });
     } catch (e: any) {
-      Alert.alert('分享失败', e?.message ?? '未知错误');
+      showDialog({
+        title: '分享失败',
+        message: e?.message ?? '未知错误',
+        icon: 'alert-circle-outline',
+      });
     } finally {
       setSharing(false);
     }

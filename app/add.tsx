@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,7 +8,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Keyboard,
   Pressable,
   ActivityIndicator,
 } from 'react-native';
@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLedgerStore, todayStr } from '@/stores/ledger';
+import { showDialog } from '@/stores/dialog';
 import { Colors, Fonts, Meals } from '@/constants/theme';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, Stamp } from '@/components/Decorations';
@@ -37,7 +38,11 @@ interface LocState {
 
 export default function AddScreen() {
   const params = useLocalSearchParams<{ meal?: MealType; id?: string; date?: string }>();
-  const store = useLedgerStore();
+  const addRecord = useLedgerStore((s) => s.addRecord);
+  const updateRecord = useLedgerStore((s) => s.updateRecord);
+  const deleteRecord = useLedgerStore((s) => s.deleteRecord);
+  const refreshTags = useLedgerStore((s) => s.refreshTags);
+  const refreshAiConfig = useLedgerStore((s) => s.refreshAiConfig);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
@@ -47,6 +52,7 @@ export default function AddScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const navigatingAway = useRef(false);
 
   // Phase 2 新增
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -82,9 +88,12 @@ export default function AddScreen() {
             setLocNameInput(r.location_name ?? '');
           }
         } else {
-          Alert.alert('提示', '该记录不存在或已被删除', [
-            { text: '返回', onPress: () => router.back() },
-          ]);
+          showDialog({
+            title: '提示',
+            message: '该记录不存在或已被删除',
+            icon: 'alert-circle-outline',
+            buttons: [{ text: '返回', onPress: () => router.back() }],
+          });
         }
       });
     }
@@ -92,8 +101,8 @@ export default function AddScreen() {
 
   const existingTags = useLedgerStore((s) => s.existingTags);
   useEffect(() => {
-    store.refreshTags();
-    store.refreshAiConfig();
+    refreshTags();
+    refreshAiConfig();
   }, []);
 
   const suggestions = useMemo(
@@ -118,9 +127,11 @@ export default function AddScreen() {
       if (info) {
         setLoc(info);
       } else {
-        Alert.alert('提示', '无法获取位置，请检查权限或手动输入地点名', [
-          { text: '知道了' },
-        ]);
+        showDialog({
+          title: '提示',
+          message: '无法获取位置，请检查权限或手动输入地点名',
+          icon: 'location-outline',
+        });
       }
     } finally {
       setLocLoading(false);
@@ -135,10 +146,15 @@ export default function AddScreen() {
   // AI 识别：选图 → 调 API → 填表单
   const onAiRecognize = async (mode: 'food' | 'receipt') => {
     if (!aiConfig.enabled || !aiConfig.apiKey) {
-      Alert.alert('AI 未启用', '请先在"我的 → AI 助手设置"中配置', [
-        { text: '去设置', onPress: () => router.push('/ai-settings') },
-        { text: '取消', style: 'cancel' },
-      ]);
+      showDialog({
+        title: 'AI 未启用',
+        message: '请先在「我的 → AI 助手设置」中配置',
+        icon: 'sparkles-outline',
+        buttons: [
+          { text: '取消', style: 'cancel' },
+          { text: '去设置', onPress: () => router.push('/ai-settings') },
+        ],
+      });
       return;
     }
     setAiMode(mode);
@@ -155,9 +171,17 @@ export default function AddScreen() {
         ? await recognizeFood(aiConfig, uri)
         : await ocrReceipt(aiConfig, uri);
       applyAiResult(result, mode);
-      Alert.alert('识别成功', describeResult(result) || '未识别到有效信息，请手动填写');
+      showDialog({
+        title: '识别成功',
+        message: describeResult(result) || '未识别到有效信息，请手动填写',
+        icon: 'checkmark-circle-outline',
+      });
     } catch (e: any) {
-      Alert.alert('识别失败', e?.message ?? '未知错误');
+      showDialog({
+        title: '识别失败',
+        message: e?.message ?? '未知错误',
+        icon: 'alert-circle-outline',
+      });
     } finally {
       setAiLoading(false);
       setAiMode(null);
@@ -175,9 +199,14 @@ export default function AddScreen() {
   };
 
   const onSave = async () => {
+    if (navigatingAway.current) return;
     const value = parseFloat(amount);
     if (!value || value <= 0) {
-      Alert.alert('提示', '请输入有效金额');
+      showDialog({
+        title: '提示',
+        message: '请输入有效金额',
+        icon: 'alert-circle-outline',
+      });
       return;
     }
     setSaving(true);
@@ -196,11 +225,25 @@ export default function AddScreen() {
     };
     try {
       if (editingId) {
-        await store.updateRecord(editingId, input);
+        await updateRecord(editingId, input);
       } else {
-        await store.addRecord(input);
+        await addRecord(input);
       }
-      router.back();
+      // 标记正在离开，防止重复触发
+      navigatingAway.current = true;
+      // 先收起键盘，避免 modal 退出动画与键盘动画冲突导致白屏
+      Keyboard.dismiss();
+      // 用 requestAnimationFrame 等待一帧，确保状态稳定后再导航
+      requestAnimationFrame(() => {
+        router.back();
+      });
+    } catch (e: any) {
+      navigatingAway.current = false;
+      showDialog({
+        title: '保存失败',
+        message: e?.message ?? '未知错误',
+        icon: 'alert-circle-outline',
+      });
     } finally {
       setSaving(false);
     }
@@ -208,17 +251,34 @@ export default function AddScreen() {
 
   const onDelete = () => {
     if (!editingId) return;
-    Alert.alert('删除记录', '确定删除这条记录吗？', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: async () => {
-          await store.deleteRecord(editingId);
-          router.back();
+    showDialog({
+      title: '删除记录',
+      message: '确定删除这条记录吗？删除后无法恢复。',
+      icon: 'trash-outline',
+      buttons: [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: async () => {
+            if (navigatingAway.current) return;
+            navigatingAway.current = true;
+            try {
+              await deleteRecord(editingId);
+              Keyboard.dismiss();
+              requestAnimationFrame(() => router.back());
+            } catch (e: any) {
+              navigatingAway.current = false;
+              showDialog({
+                title: '删除失败',
+                message: e?.message ?? '未知错误',
+                icon: 'alert-circle-outline',
+              });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const activeMeal = Meals[meal];

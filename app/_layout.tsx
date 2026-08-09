@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { useAppFonts } from '@/constants/fonts';
+import { DialogHost } from '@/components/DialogHost';
 
 export default function RootLayout() {
   const { ready } = useAppFonts();
@@ -39,6 +40,7 @@ export default function RootLayout() {
           options={{ presentation: 'modal', title: '分享', headerShown: false }}
         />
       </Stack>
+      <DialogHost />
     </>
   );
 }

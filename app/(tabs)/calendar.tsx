@@ -7,6 +7,7 @@ import {
   ScrollView,
   RefreshControl,
   Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -159,34 +160,48 @@ export default function CalendarScreen() {
         </ScrollView>
 
         {/* 当日明细弹层 */}
-        <Modal visible={!!selectedDate} transparent animationType="fade">
-          <View style={styles.modalMask}>
-            <View style={styles.modalCard}>
+        <Modal visible={!!selectedDate} transparent animationType="fade" onRequestClose={() => setSelectedDate(null)}>
+          <Pressable style={styles.modalMask} onPress={() => setSelectedDate(null)}>
+            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
               <View style={styles.modalTapeWrap}>
                 <Tape color="green" width={60} height={16} rotate={-5} />
               </View>
               <View style={styles.modalHead}>
-                <Text style={styles.modalDate}>
-                  {selectedDate ? formatModalDate(selectedDate) : ''}
-                </Text>
-                <TouchableOpacity onPress={() => setSelectedDate(null)}>
-                  <Ionicons name="close" size={20} color={Colors.inkSoft} />
+                <View style={styles.modalHeadLeft}>
+                  <Ionicons name="calendar-outline" size={18} color={Colors.olive} />
+                  <Text style={styles.modalDate}>
+                    {selectedDate ? formatModalDate(selectedDate) : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setSelectedDate(null)} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={18} color={Colors.inkSoft} />
                 </TouchableOpacity>
               </View>
               <DashedDivider />
               {dayRecords.length === 0 ? (
-                <Text style={styles.modalEmpty}>当日无记录</Text>
+                <View style={styles.modalEmptyWrap}>
+                  <Ionicons name="receipt-outline" size={32} color={Colors.inkLight} />
+                  <Text style={styles.modalEmpty}>当日无记录</Text>
+                </View>
               ) : (
-                <ScrollView style={styles.modalList}>
-                  {dayRecords.map((r, i) => (
-                    <DayRecordRow
-                      key={r.id}
-                      r={r}
-                      last={i === dayRecords.length - 1}
-                      onClose={() => setSelectedDate(null)}
-                    />
-                  ))}
-                </ScrollView>
+                <>
+                  <ScrollView style={styles.modalList}>
+                    {dayRecords.map((r, i) => (
+                      <DayRecordRow
+                        key={r.id}
+                        r={r}
+                        last={i === dayRecords.length - 1}
+                        onClose={() => setSelectedDate(null)}
+                      />
+                    ))}
+                  </ScrollView>
+                  <View style={styles.modalTotalRow}>
+                    <Text style={styles.modalTotalLabel}>当日合计</Text>
+                    <Text style={styles.modalTotalValue}>
+                      ¥{dayRecords.reduce((s, r) => s + r.amount, 0).toFixed(2)}
+                    </Text>
+                  </View>
+                </>
               )}
               <TouchableOpacity
                 style={styles.modalAddBtn}
@@ -199,10 +214,11 @@ export default function CalendarScreen() {
                   });
                 }}
               >
+                <Ionicons name="add" size={16} color={Colors.note} />
                 <Text style={styles.modalAddText}>补记一笔</Text>
               </TouchableOpacity>
-            </View>
-          </View>
+            </Pressable>
+          </Pressable>
         </Modal>
       </SafeAreaView>
     </PaperBackground>
@@ -371,6 +387,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+  },
+  modalHeadLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  modalCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.paperLight,
   },
   modalDate: {
     fontSize: 16,
@@ -379,7 +410,30 @@ const styles = StyleSheet.create({
     color: Colors.ink,
     letterSpacing: 1,
   },
-  modalEmpty: { fontSize: 13, color: Colors.inkLight, textAlign: 'center', paddingVertical: 20 },
+  modalEmptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    gap: 10,
+  },
+  modalEmpty: { fontSize: 13, color: Colors.inkLight, textAlign: 'center' },
+  modalTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.line,
+    borderStyle: 'dashed',
+  },
+  modalTotalLabel: { fontSize: 13, color: Colors.inkSoft, fontFamily: Fonts.serif },
+  modalTotalValue: {
+    fontSize: 16,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.olive,
+  },
   modalList: { maxHeight: 300 },
   modalRow: {
     flexDirection: 'row',

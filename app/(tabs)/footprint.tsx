@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,67 +7,60 @@ import {
   ScrollView,
   RefreshControl,
   Image,
-  Alert,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
 import { useLedgerStore } from '@/stores/ledger';
-import { Colors, Fonts, formatMoney, toCNNumber } from '@/constants/theme';
+import { Colors, Fonts, Meals, formatMoney, toCNNumber } from '@/constants/theme';
 import { Header } from '@/components/Header';
 import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
-import { PaperCard, Tape, DashedDivider, InkDot } from '@/components/Decorations';
-import type { LocationAgg } from '@/types';
+import { PaperCard, Tape, InkDot } from '@/components/Decorations';
+import type { LedgerRecord, MealType, LocationAgg } from '@/types';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+// 贴纸卡片宽度（2 列，扣除间距和边距）
+const CARD_WIDTH = (SCREEN_WIDTH - 18 * 2 - 12) / 2;
 
 export default function FootprintScreen() {
+  const allRecords = useLedgerStore((s) => s.allRecords);
   const locations = useLedgerStore((s) => s.locations);
+  const refreshAllRecords = useLedgerStore((s) => s.refreshAllRecords);
   const refreshLocations = useLedgerStore((s) => s.refreshLocations);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    refreshAllRecords();
     refreshLocations();
   }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refreshLocations();
+    await Promise.all([refreshAllRecords(), refreshLocations()]);
     setRefreshing(false);
   };
 
-  const totalCount = locations.reduce((s, l) => s + l.count, 0);
-  const totalAmount = locations.reduce((s, l) => s + l.total, 0);
+  const totalCount = allRecords.length;
+  const totalAmount = allRecords.reduce((s, r) => s + r.amount, 0);
+  const photoCount = allRecords.filter((r) => r.photo_uri).length;
 
-  // 计算地图区域
-  const region = (() => {
-    if (locations.length === 0) return null;
-    if (locations.length === 1) {
-      return {
-        latitude: locations[0].latitude,
-        longitude: locations[0].longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      };
-    }
-    const lats = locations.map((l) => l.latitude);
-    const lngs = locations.map((l) => l.longitude);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(0.02, (maxLat - minLat) * 1.4),
-      longitudeDelta: Math.max(0.02, (maxLng - minLng) * 1.4),
-    };
-  })();
+  // 分两列排布贴纸卡片
+  const columns = useMemo(() => {
+    const left: LedgerRecord[] = [];
+    const right: LedgerRecord[] = [];
+    allRecords.forEach((r, i) => {
+      if (i % 2 === 0) left.push(r);
+      else right.push(r);
+    });
+    return { left, right };
+  }, [allRecords]);
 
   return (
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="美食足迹" date="去过的店" />
+        <Header title="美食足迹" date="贴图墙" />
         <ScrollView
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -77,13 +70,18 @@ export default function FootprintScreen() {
             <PaperCard tape="pink" rotate={0} padding={14} showTape>
               <View style={styles.overviewRow}>
                 <View style={styles.overviewItem}>
-                  <Text style={styles.overviewValue}>{locations.length}</Text>
-                  <Text style={styles.overviewLabel}>个地点</Text>
+                  <Text style={styles.overviewValue}>{totalCount}</Text>
+                  <Text style={styles.overviewLabel}>笔记录</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
-                  <Text style={styles.overviewValue}>{totalCount}</Text>
-                  <Text style={styles.overviewLabel}>次打卡</Text>
+                  <Text style={styles.overviewValue}>{photoCount}</Text>
+                  <Text style={styles.overviewLabel}>张照片</Text>
+                </View>
+                <View style={styles.overviewDivider} />
+                <View style={styles.overviewItem}>
+                  <Text style={styles.overviewValue}>{locations.length}</Text>
+                  <Text style={styles.overviewLabel}>个地点</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
@@ -94,55 +92,47 @@ export default function FootprintScreen() {
             </PaperCard>
           </View>
 
-          {/* 地图 */}
-          {region ? (
-            <View style={styles.px}>
-              <PaperCard tape="yellow" rotate={0} padding={8} showTape>
-                <View style={styles.mapBox}>
-                  <MapView
-                    style={styles.map}
-                    initialRegion={region}
-                    showsUserLocation
-                  >
-                    {locations.map((l, i) => (
-                      <Marker
-                        key={`${l.location_name}-${i}`}
-                        coordinate={{
-                          latitude: l.latitude,
-                          longitude: l.longitude,
-                        }}
-                        title={l.location_name || `地点${i + 1}`}
-                        description={`${l.count}次 · ${formatMoney(l.total)}`}
-                      />
-                    ))}
-                  </MapView>
-                  <View style={styles.mapHint}>
-                    <Ionicons name="information-circle-outline" size={11} color={Colors.note} />
-                    <Text style={styles.mapHintText}>
-                      如不显示底图，需配置 Google Maps API Key
-                    </Text>
-                  </View>
-                </View>
-              </PaperCard>
-            </View>
-          ) : null}
-
-          {/* 地点列表 */}
+          {/* 贴图墙标题 */}
           <View style={styles.px}>
-            <View style={styles.listTitleRow}>
-              <Tape color="green" width={14} height={9} rotate={-6} />
-              <Text style={styles.listTitle}>地点清单</Text>
+            <View style={styles.sectionTitleRow}>
+              <Tape color="yellow" width={16} height={10} rotate={-6} />
+              <Text style={styles.sectionTitle}>美食贴图墙</Text>
+              <Text style={styles.sectionSub}>点击可编辑</Text>
             </View>
+          </View>
 
-            {locations.length === 0 ? (
-              <Empty
-                icon="map-outline"
-                text="还没有地点记录"
-                hint={'记账时点击「获取位置」并填写地点名即可生成足迹'}
-                actionLabel="去记一笔"
-                onAction={() => router.push('/add')}
-              />
-            ) : (
+          {allRecords.length === 0 ? (
+            <Empty
+              icon="images-outline"
+              text="贴图墙还是空的"
+              hint="记一笔美食并添加照片，就会出现在这里"
+              actionLabel="去记一笔"
+              onAction={() => router.push('/add')}
+            />
+          ) : (
+            /* 贴图墙：双列瀑布流 */
+            <View style={styles.boardWrap}>
+              <View style={styles.column}>
+                {columns.left.map((r, i) => (
+                  <StickerCard key={r.id} record={r} index={i * 2} />
+                ))}
+              </View>
+              <View style={styles.column}>
+                {columns.right.map((r, i) => (
+                  <StickerCard key={r.id} record={r} index={i * 2 + 1} />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* 地点清单 */}
+          {locations.length > 0 ? (
+            <View style={styles.px}>
+              <View style={styles.sectionTitleRow}>
+                <Tape color="green" width={16} height={10} rotate={-6} />
+                <Text style={styles.sectionTitle}>地点清单</Text>
+                <Text style={styles.sectionSub}>{locations.length} 处</Text>
+              </View>
               <PaperCard tape="blue" rotate={0} padding={0} showTape>
                 {locations.map((l, i) => (
                   <LocationRow
@@ -152,13 +142,90 @@ export default function FootprintScreen() {
                   />
                 ))}
               </PaperCard>
-            )}
-          </View>
+            </View>
+          ) : null}
 
           <View style={{ height: 24 }} />
         </ScrollView>
       </SafeAreaView>
     </PaperBackground>
+  );
+}
+
+// ===== 贴纸卡片（拍立得风） =====
+function StickerCard({ record, index }: { record: LedgerRecord; index: number }) {
+  const meal = Meals[record.meal as MealType];
+  const tags = record.tags ? record.tags.split(',').filter(Boolean) : [];
+  const [, m, d] = record.date.split('-').map(Number);
+  // 交替旋转角度，营造手账随意贴的感觉
+  const rotate = index % 4 === 0 ? -2.5 : index % 4 === 1 ? 2 : index % 4 === 2 ? -1.5 : 1.5;
+  const tapeColor = (['yellow', 'pink', 'green', 'blue'] as const)[index % 4];
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() =>
+        router.push({ pathname: '/add', params: { id: String(record.id) } })
+      }
+      style={[styles.stickerWrap, { transform: [{ rotate: `${rotate}deg` }] }]}
+    >
+      {/* 顶部胶带 */}
+      <View style={styles.stickerTapeWrap}>
+        <Tape color={tapeColor} width={44} height={14} rotate={-4} />
+      </View>
+
+      {/* 照片区 / 占位区 */}
+      <View style={styles.stickerPhotoBox}>
+        {record.photo_uri ? (
+          <Image source={{ uri: record.photo_uri }} style={styles.stickerPhoto} />
+        ) : (
+          <View style={[styles.stickerPlaceholder, { backgroundColor: meal.color + '18' }]}>
+            <Ionicons name="restaurant" size={32} color={meal.color} />
+            <Text style={[styles.stickerPlaceholderText, { color: meal.color }]}>
+              {meal.label}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* 底部信息区 */}
+      <View style={styles.stickerInfo}>
+        <View style={styles.stickerTopRow}>
+          <Text style={styles.stickerAmount}>¥{record.amount.toFixed(0)}</Text>
+          {record.rating && record.rating > 0 ? (
+            <View style={styles.stickerStar}>
+              <Ionicons name="star" size={10} color={Colors.ochre} />
+              <Text style={styles.stickerStarText}>{record.rating}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.stickerDate}>
+          {toCNNumber(m)}月{toCNNumber(d)}日 · {meal.label}
+        </Text>
+        {record.location_name ? (
+          <View style={styles.stickerLocRow}>
+            <Ionicons name="location-outline" size={9} color={Colors.olive} />
+            <Text style={styles.stickerLoc} numberOfLines={1}>
+              {record.location_name}
+            </Text>
+          </View>
+        ) : null}
+        {record.note ? (
+          <Text style={styles.stickerNote} numberOfLines={2}>
+            {record.note}
+          </Text>
+        ) : null}
+        {tags.length > 0 ? (
+          <View style={styles.stickerTagsRow}>
+            {tags.slice(0, 2).map((t) => (
+              <View key={t} style={[styles.stickerTag, { borderColor: meal.color }]}>
+                <Text style={[styles.stickerTagText, { color: meal.color }]}>#{t}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -186,14 +253,7 @@ function LocationRow({ loc, last }: { loc: LocationAgg; last: boolean }) {
         </View>
         <Text style={styles.locLast}>最近 {loc.last_date}</Text>
       </View>
-      <View style={styles.locCoordBox}>
-        <Text style={styles.locCoord}>
-          {loc.latitude.toFixed(3)}
-        </Text>
-        <Text style={styles.locCoord}>
-          {loc.longitude.toFixed(3)}
-        </Text>
-      </View>
+      <Ionicons name="chevron-forward" size={16} color={Colors.inkLight} />
     </View>
   );
 }
@@ -205,45 +265,152 @@ const styles = StyleSheet.create({
   overviewRow: { flexDirection: 'row', alignItems: 'center' },
   overviewItem: { flex: 1, alignItems: 'center' },
   overviewValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: Fonts.serif,
     fontWeight: '700',
     color: Colors.ink,
   },
-  overviewLabel: { fontSize: 11, color: Colors.inkLight, marginTop: 2, fontFamily: Fonts.serif },
+  overviewLabel: { fontSize: 10, color: Colors.inkLight, marginTop: 2, fontFamily: Fonts.serif },
   overviewDivider: { width: 1, height: 24, backgroundColor: Colors.line, opacity: 0.5 },
-  mapBox: {
-    position: 'relative',
-    height: 200,
-    borderRadius: 4,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.line,
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
   },
-  map: { width: '100%', height: '100%' },
-  mapHint: {
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+    letterSpacing: 1,
+    flex: 1,
+  },
+  sectionSub: { fontSize: 11, color: Colors.inkLight, fontStyle: 'italic' },
+
+  // 贴图墙
+  boardWrap: {
+    flexDirection: 'row',
+    paddingHorizontal: 18,
+    gap: 12,
+  },
+  column: {
+    flex: 1,
+    gap: 14,
+  },
+
+  // 贴纸卡片
+  stickerWrap: {
+    width: '100%',
+    backgroundColor: Colors.note,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(61,46,31,0.12)',
+    overflow: 'hidden',
+    shadowColor: '#3D2E1F',
+    shadowOffset: { width: 1, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  stickerTapeWrap: {
     position: 'absolute',
-    bottom: 4,
-    left: 4,
-    right: 4,
+    top: -7,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  stickerPhotoBox: {
+    width: '100%',
+    height: CARD_WIDTH * 0.85,
+    backgroundColor: Colors.paperLight,
+  },
+  stickerPhoto: { width: '100%', height: '100%' },
+  stickerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  stickerPlaceholderText: {
+    fontSize: 12,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+  },
+  stickerInfo: {
+    padding: 8,
+  },
+  stickerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stickerAmount: {
+    fontSize: 17,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+  },
+  stickerStar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: Colors.ochre + '18',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  stickerStarText: {
+    fontSize: 10,
+    color: Colors.ochre,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+  },
+  stickerDate: {
+    fontSize: 10,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    marginTop: 2,
+  },
+  stickerLocRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: 'rgba(61,46,31,0.55)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 3,
+    marginTop: 3,
   },
-  mapHintText: { fontSize: 9, color: Colors.note, fontStyle: 'italic' },
-  listTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  listTitle: {
-    fontSize: 15,
+  stickerLoc: {
+    fontSize: 10,
+    color: Colors.olive,
     fontFamily: Fonts.serif,
-    fontWeight: '700',
-    color: Colors.ink,
-    marginLeft: 8,
-    letterSpacing: 1,
+    flex: 1,
   },
+  stickerNote: {
+    fontSize: 10,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    marginTop: 3,
+    lineHeight: 14,
+    fontStyle: 'italic',
+  },
+  stickerTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 5,
+  },
+  stickerTag: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+    borderWidth: 0.8,
+    borderStyle: 'dashed',
+    backgroundColor: Colors.paperLight,
+  },
+  stickerTagText: { fontSize: 9, fontFamily: Fonts.serif },
+
+  // 地点列表
   locRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -282,6 +449,4 @@ const styles = StyleSheet.create({
   locMetaText: { fontSize: 11, color: Colors.inkSoft, fontFamily: Fonts.serif },
   locDot: { fontSize: 11, color: Colors.inkLight },
   locLast: { fontSize: 10, color: Colors.inkLight, marginTop: 2, fontStyle: 'italic' },
-  locCoordBox: { alignItems: 'flex-end' },
-  locCoord: { fontSize: 9, color: Colors.inkLight, fontStyle: 'italic' },
 });

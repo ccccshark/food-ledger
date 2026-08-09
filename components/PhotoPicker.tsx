@@ -1,7 +1,8 @@
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts } from '@/constants/theme';
+import { showDialog } from '@/stores/dialog';
 import { pickPhoto, takePhoto } from '@/utils/media';
 
 // 照片选择器：显示已选照片或"拍照/相册"入口
@@ -13,11 +14,16 @@ export function PhotoPicker({
   onChange: (uri: string | null) => void;
 }) {
   const choose = () => {
-    Alert.alert('添加照片', undefined, [
-      { text: '拍照', onPress: () => doTake() },
-      { text: '从相册选择', onPress: () => doPick() },
-      { text: '取消', style: 'cancel' },
-    ]);
+    showDialog({
+      title: '添加照片',
+      message: '选择拍照或从相册选取',
+      icon: 'camera-outline',
+      buttons: [
+        { text: '取消', style: 'cancel' },
+        { text: '拍照', onPress: () => doTake() },
+        { text: '相册', onPress: () => doPick() },
+      ],
+    });
   };
 
   const doPick = async () => {

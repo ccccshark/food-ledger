@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Switch,
   ActivityIndicator,
 } from 'react-native';
@@ -14,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLedgerStore } from '@/stores/ledger';
+import { showDialog } from '@/stores/dialog';
 import { Colors, Fonts } from '@/constants/theme';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider } from '@/components/Decorations';
@@ -51,14 +51,21 @@ export default function AiSettingsScreen() {
       enabled,
     };
     await setAiConfig(cfg);
-    Alert.alert('已保存', 'AI 配置已保存到本地', [
-      { text: '好的', onPress: () => router.back() },
-    ]);
+    showDialog({
+      title: '已保存',
+      message: 'AI 配置已保存到本地',
+      icon: 'checkmark-circle-outline',
+      buttons: [{ text: '好的', onPress: () => router.back() }],
+    });
   };
 
   const onTest = async () => {
     if (!apiKey.trim()) {
-      Alert.alert('提示', '请先填写 API Key', [{ text: '知道了' }]);
+      showDialog({
+        title: '提示',
+        message: '请先填写 API Key',
+        icon: 'alert-circle-outline',
+      });
       return;
     }
     setTesting(true);
@@ -66,7 +73,11 @@ export default function AiSettingsScreen() {
       // 选一张图测试
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('提示', '需要相册权限才能测试', [{ text: '知道了' }]);
+        showDialog({
+          title: '提示',
+          message: '需要相册权限才能测试',
+          icon: 'alert-circle-outline',
+        });
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -82,13 +93,17 @@ export default function AiSettingsScreen() {
         enabled: true,
       };
       const r = await recognizeFood(cfg, result.assets[0].uri);
-      Alert.alert(
-        '测试成功',
-        `识别结果：\n金额=${r.amount ?? '—'}\n餐次=${r.meal ?? '—'}\n备注=${r.note ?? '—'}`,
-        [{ text: '好的' }]
-      );
+      showDialog({
+        title: '测试成功',
+        message: `识别结果：\n金额=${r.amount ?? '—'}\n餐次=${r.meal ?? '—'}\n备注=${r.note ?? '—'}`,
+        icon: 'checkmark-circle-outline',
+      });
     } catch (e: any) {
-      Alert.alert('测试失败', e?.message ?? '未知错误', [{ text: '知道了' }]);
+      showDialog({
+        title: '测试失败',
+        message: e?.message ?? '未知错误',
+        icon: 'alert-circle-outline',
+      });
     } finally {
       setTesting(false);
     }

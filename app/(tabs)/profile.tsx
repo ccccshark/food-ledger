@@ -4,15 +4,13 @@ import {
   Text,
   View,
   TouchableOpacity,
-  Alert,
-  Modal,
-  TextInput,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLedgerStore } from '@/stores/ledger';
+import { showDialog, useDialogStore } from '@/stores/dialog';
 import { Colors, Fonts, formatMoney, toCNNumber } from '@/constants/theme';
 import { Header } from '@/components/Header';
 import { PaperBackground } from '@/components/PaperBackground';
@@ -28,8 +26,6 @@ export default function ProfileScreen() {
   const aiConfig = useLedgerStore((s) => s.aiConfig);
   const refreshAiConfig = useLedgerStore((s) => s.refreshAiConfig);
 
-  const [budgetModal, setBudgetModal] = useState(false);
-  const [budgetInput, setBudgetInput] = useState('');
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -46,25 +42,56 @@ export default function ProfileScreen() {
     try {
       const all = await dao.listAllRecords();
       if (all.length === 0) {
-        Alert.alert('提示', '还没有任何记录可以导出');
+        showDialog({
+          title: '提示',
+          message: '还没有任何记录可以导出',
+          icon: 'alert-circle-outline',
+        });
         return;
       }
       await exportRecordsCsv(all);
     } catch (e: any) {
-      Alert.alert('导出失败', e?.message ?? '未知错误');
+      showDialog({
+        title: '导出失败',
+        message: e?.message ?? '未知错误',
+        icon: 'alert-circle-outline',
+      });
     } finally {
       setExporting(false);
     }
   };
 
-  const onSaveBudget = async () => {
-    const v = parseFloat(budgetInput);
-    if (isNaN(v) || v < 0) {
-      Alert.alert('提示', '请输入有效金额');
-      return;
-    }
-    await useLedgerStore.getState().setBudget(v);
-    setBudgetModal(false);
+  const onOpenBudget = () => {
+    showDialog({
+      title: '设定月度预算',
+      message: '设为 0 即关闭预算提醒',
+      icon: 'wallet-outline',
+      input: {
+        placeholder: '0.00',
+        value: budget > 0 ? String(budget) : '',
+        keyboardType: 'decimal-pad',
+        prefix: '¥',
+      },
+      buttons: [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '保存',
+          onPress: async () => {
+            const raw = useDialogStore.getState().inputValue;
+            const v = parseFloat(raw);
+            if (isNaN(v) || v < 0) {
+              showDialog({
+                title: '提示',
+                message: '请输入有效金额',
+                icon: 'alert-circle-outline',
+              });
+              return;
+            }
+            await useLedgerStore.getState().setBudget(v);
+          },
+        },
+      ],
+    });
   };
 
   return (
@@ -76,10 +103,7 @@ export default function ProfileScreen() {
           <PaperCard tape="pink" rotate={-0.5} padding={16} showTape>
             <TouchableOpacity
               style={styles.rowBtn}
-              onPress={() => {
-                setBudgetInput(budget > 0 ? String(budget) : '');
-                setBudgetModal(true);
-              }}
+              onPress={onOpenBudget}
             >
               <View style={[styles.iconBox, { borderColor: Colors.stamp }]}>
                 <Ionicons name="wallet-outline" size={18} color={Colors.stamp} />
@@ -187,45 +211,6 @@ export default function ProfileScreen() {
             <Text style={styles.aboutVersion}>本地优先 · 数据仅存于本机</Text>
           </View>
         </View>
-
-        {/* 预算弹窗 */}
-        <Modal visible={budgetModal} transparent animationType="fade">
-          <View style={styles.modalMask}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalTapeWrap}>
-                <Tape color="yellow" width={60} height={16} rotate={-5} />
-              </View>
-              <Text style={styles.modalTitle}>设定月度预算</Text>
-              <Text style={styles.modalHint}>设为 0 即关闭预算提醒</Text>
-              <View style={styles.modalInputRow}>
-                <Text style={styles.modalCurrency}>¥</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                  placeholderTextColor={Colors.inkLight}
-                  value={budgetInput}
-                  onChangeText={setBudgetInput}
-                  autoFocus
-                />
-              </View>
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnCancel]}
-                  onPress={() => setBudgetModal(false)}
-                >
-                  <Text style={styles.modalBtnCancelText}>取消</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnSave]}
-                  onPress={onSaveBudget}
-                >
-                  <Text style={styles.modalBtnSaveText}>封存</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </SafeAreaView>
     </PaperBackground>
   );
@@ -300,85 +285,4 @@ const styles = StyleSheet.create({
   about: { alignItems: 'center', paddingVertical: 28, gap: 8 },
   aboutText: { fontSize: 13, color: Colors.inkSoft, fontFamily: Fonts.serif },
   aboutVersion: { fontSize: 11, color: Colors.inkLight, fontStyle: 'italic' },
-  modalMask: {
-    flex: 1,
-    backgroundColor: 'rgba(61, 46, 31, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  modalCard: {
-    backgroundColor: Colors.note,
-    borderRadius: 4,
-    padding: 22,
-    paddingTop: 16,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: Colors.line,
-  },
-  modalTapeWrap: {
-    position: 'absolute',
-    top: -8,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontFamily: Fonts.serif,
-    fontWeight: '700',
-    color: Colors.ink,
-    textAlign: 'center',
-    letterSpacing: 2,
-  },
-  modalHint: {
-    fontSize: 11,
-    color: Colors.inkLight,
-    marginTop: 4,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  modalInputRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 16,
-    borderBottomWidth: 1.5,
-    borderBottomColor: Colors.line,
-    paddingBottom: 8,
-  },
-  modalCurrency: {
-    fontSize: 22,
-    fontFamily: Fonts.serif,
-    fontWeight: '700',
-    color: Colors.ink,
-    marginRight: 6,
-  },
-  modalInput: {
-    flex: 1,
-    fontSize: 30,
-    fontFamily: Fonts.serif,
-    fontWeight: '700',
-    color: Colors.ink,
-    padding: 0,
-  },
-  modalBtnRow: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 4, alignItems: 'center' },
-  modalBtnCancel: {
-    backgroundColor: Colors.paperLight,
-    borderWidth: 1,
-    borderColor: Colors.line,
-  },
-  modalBtnCancelText: { color: Colors.inkSoft, fontSize: 15, fontFamily: Fonts.serif },
-  modalBtnSave: {
-    backgroundColor: Colors.stamp,
-    borderWidth: 1,
-    borderColor: Colors.ink,
-  },
-  modalBtnSaveText: {
-    color: Colors.note,
-    fontSize: 15,
-    fontFamily: Fonts.serif,
-    fontWeight: '700',
-    letterSpacing: 3,
-  },
 });
