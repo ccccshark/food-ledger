@@ -6,9 +6,14 @@ import type {
   DaySummary,
   MealType,
   LocationAgg,
+  Book,
+  BookKind,
+  Recipe,
+  RecipeInput,
 } from '@/types';
 import * as dao from '@/db';
 import { AiConfig, DEFAULT_AI_CONFIG } from '@/services/ai';
+import { syncWidgetFromState } from '@/utils/widget';
 
 interface LedgerState {
   // 数据
@@ -25,6 +30,13 @@ interface LedgerState {
   locations: LocationAgg[];
   aiConfig: AiConfig;
   diyStickers: { id: string; label: string; uri: string }[];
+
+  // 账本
+  books: Book[];
+  currentBookId: number; // 默认 1（日常账本）
+
+  // 食谱
+  recipes: Recipe[];
 
   // 选中状态
   currentMonth: string; // YYYY-MM
@@ -49,6 +61,19 @@ interface LedgerState {
   updateRecord: (id: number, input: RecordInput) => Promise<void>;
   deleteRecord: (id: number) => Promise<void>;
   setBudget: (amount: number) => Promise<void>;
+
+  // 账本动作
+  refreshBooks: () => Promise<void>;
+  setCurrentBook: (id: number) => Promise<void>;
+  addBook: (input: { name: string; kind?: BookKind; color?: string }) => Promise<void>;
+  updateBook: (id: number, input: Partial<{ name: string; kind: BookKind; color: string }>) => Promise<void>;
+  deleteBook: (id: number) => Promise<void>;
+  refreshAllForBook: () => Promise<void>; // 切换账本后刷新所有依赖数据
+
+  // 食谱动作
+  refreshRecipes: () => Promise<void>;
+  saveRecipe: (input: RecipeInput, id?: number) => Promise<number>;
+  deleteRecipe: (id: number) => Promise<void>;
 }
 
 function todayStr(): string {
@@ -77,40 +102,54 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
   locations: [],
   aiConfig: DEFAULT_AI_CONFIG,
   diyStickers: [],
+  books: [],
+  currentBookId: 1,
+  recipes: [],
   currentMonth: currentMonthStr(),
   currentDate: todayStr(),
 
   refreshToday: async () => {
     const date = get().currentDate;
+    const bookId = get().currentBookId;
     const [summary, allMonth] = await Promise.all([
-      dao.getDaySummary(date),
-      dao.listRecordsByMonth(date.slice(0, 7)),
+      dao.getDaySummary(date, bookId),
+      dao.listRecordsByMonth(date.slice(0, 7), bookId),
     ]);
     const todayRecords = allMonth.filter((r) => r.date === date);
     set({ today: summary, todayRecords });
+    // 同步桌面小组件数据
+    syncWidgetFromState({
+      todayTotal: summary.total,
+      todayCount: summary.count,
+      currentBook: get().books.find((b) => b.id === bookId),
+    });
   },
 
   refreshMonth: async (month?: string) => {
     const m = month ?? get().currentMonth;
+    const bookId = get().currentBookId;
     const [summary, records] = await Promise.all([
-      dao.getMonthSummary(m),
-      dao.listRecordsByMonth(m),
+      dao.getMonthSummary(m, bookId),
+      dao.listRecordsByMonth(m, bookId),
     ]);
     set({ monthSummary: summary, monthRecords: records, currentMonth: m });
   },
 
   refreshAllRecords: async () => {
-    const records = await dao.listAllRecords();
+    const bookId = get().currentBookId;
+    const records = await dao.listAllRecords(bookId);
     set({ allRecords: records });
   },
 
   refreshRecentDaily: async (days = 7) => {
-    const rows = await dao.getRecentDailyTotals(days);
+    const bookId = get().currentBookId;
+    const rows = await dao.getRecentDailyTotals(days, bookId);
     set({ recentDaily: rows });
   },
 
   refreshMonthlyTotals: async () => {
-    const rows = await dao.getMonthlyTotals();
+    const bookId = get().currentBookId;
+    const rows = await dao.getMonthlyTotals(bookId);
     set({ monthlyTotals: rows });
   },
 
@@ -120,18 +159,21 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
   },
 
   refreshTags: async () => {
-    const tags = await dao.getExistingTags();
+    const bookId = get().currentBookId;
+    const tags = await dao.getExistingTags(bookId);
     set({ existingTags: tags });
   },
 
   refreshLocations: async () => {
-    const locs = await dao.getLocations();
+    const bookId = get().currentBookId;
+    const locs = await dao.getLocations(bookId);
     set({ locations: locs });
   },
 
   refreshMonthCalendar: async (month?: string) => {
     const m = month ?? get().currentMonth;
-    const rows = await dao.getMonthCalendar(m);
+    const bookId = get().currentBookId;
+    const rows = await dao.getMonthCalendar(m, bookId);
     set({ monthCalendar: rows });
   },
 
@@ -179,7 +221,9 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
   setCurrentMonth: (m) => set({ currentMonth: m }),
 
   addRecord: async (input) => {
-    const id = await dao.insertRecord(input);
+    // 注入当前账本 id
+    const bookId = get().currentBookId;
+    const id = await dao.insertRecord({ ...input, book_id: bookId });
     await Promise.all([
       get().refreshToday(),
       get().refreshMonth(),
@@ -224,6 +268,80 @@ export const useLedgerStore = create<LedgerState>((set, get) => ({
   setBudget: async (amount) => {
     await dao.setSetting('monthlyBudget', String(amount));
     set({ budget: amount });
+  },
+
+  // ---------- 账本 ----------
+  refreshBooks: async () => {
+    const books = await dao.listBooks();
+    set({ books });
+    // 持久化当前账本选择
+    const raw = await dao.getSetting('currentBookId');
+    const persisted = raw ? Number(raw) : 0;
+    const current = get().currentBookId;
+    if (persisted && persisted !== current && books.some((b) => b.id === persisted)) {
+      await get().setCurrentBook(persisted);
+    } else if (!books.some((b) => b.id === current)) {
+      // 当前账本被删除，回退到 1
+      await get().setCurrentBook(1);
+    }
+  },
+
+  setCurrentBook: async (id) => {
+    await dao.setSetting('currentBookId', String(id));
+    set({ currentBookId: id });
+    await get().refreshAllForBook();
+  },
+
+  addBook: async (input) => {
+    await dao.addBook(input);
+    await get().refreshBooks();
+  },
+
+  updateBook: async (id, input) => {
+    await dao.updateBook(id, input);
+    await get().refreshBooks();
+  },
+
+  deleteBook: async (id) => {
+    await dao.deleteBook(id);
+    if (get().currentBookId === id) {
+      set({ currentBookId: 1 });
+      await dao.setSetting('currentBookId', '1');
+    }
+    await get().refreshBooks();
+    await get().refreshAllForBook();
+  },
+
+  refreshAllForBook: async () => {
+    await Promise.all([
+      get().refreshToday(),
+      get().refreshMonth(),
+      get().refreshAllRecords(),
+      get().refreshRecentDaily(),
+      get().refreshTags(),
+      get().refreshLocations(),
+      get().refreshMonthCalendar(),
+      get().refreshMonthlyTotals(),
+    ]);
+  },
+
+  // ---------- 食谱 ----------
+  refreshRecipes: async () => {
+    const recipes = await dao.listRecipes();
+    set({ recipes });
+  },
+
+  saveRecipe: async (input, id) => {
+    const newId = id
+      ? (await dao.updateRecipe(id, input), id)
+      : await dao.insertRecipe(input);
+    await get().refreshRecipes();
+    return newId;
+  },
+
+  deleteRecipe: async (id) => {
+    await dao.deleteRecipe(id);
+    await get().refreshRecipes();
   },
 }));
 

@@ -27,7 +27,8 @@ import { StarRating } from '@/components/StarRating';
 import { PhotoPicker } from '@/components/PhotoPicker';
 import { StickerLibrary, BUILTIN_STICKERS, type StickerItem } from '@/components/StickerLibrary';
 import type { MealType, PhotoStyle, PhotoShape } from '@/types';
-import { MEAL_ORDER, MEAL_LABELS } from '@/types';
+import { MEAL_ORDER } from '@/types';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
 import * as dao from '@/db';
 import { getCurrentLocation, pickPhoto, pickMultiPhotos } from '@/utils/media';
 import { recognizeFood, ocrReceipt, describeResult, AiRecognizeResult } from '@/services/ai';
@@ -47,6 +48,7 @@ interface LocState {
 
 export default function AddScreen() {
   const params = useLocalSearchParams<{ meal?: MealType; id?: string; date?: string }>();
+  useT(); // subscribe to lang changes for re-render
   const addRecord = useLedgerStore((s) => s.addRecord);
   const updateRecord = useLedgerStore((s) => s.updateRecord);
   const deleteRecord = useLedgerStore((s) => s.deleteRecord);
@@ -105,11 +107,18 @@ export default function AddScreen() {
           setPhotoShape(r.photo_shape ?? 'square');
           setPhotosExtra(r.photos_extra ?? []);
           setRating(r.rating ?? 0);
-          // 还原已贴贴纸
+          // 还原已贴贴纸（按 id 从内置库补回 svg，避免渲染普通对象导致白屏）
           if (r.stickers) {
             try {
               const saved: StickerItem[] = JSON.parse(r.stickers);
-              if (Array.isArray(saved)) setPastedStickers(saved);
+              if (Array.isArray(saved)) {
+                const restored = saved.map((s) => {
+                  if (s.uri) return s; // DIY 贴纸靠 uri 渲染
+                  const builtin = BUILTIN_STICKERS.find((b) => b.id === s.id);
+                  return builtin ? { ...builtin } : { ...s, svg: undefined };
+                });
+                setPastedStickers(restored);
+              }
             } catch {
               /* ignore */
             }
@@ -124,10 +133,10 @@ export default function AddScreen() {
           }
         } else {
           showDialog({
-            title: '提示',
-            message: '该记录不存在或已被删除',
+            title: t('common.tip'),
+            message: t('add.record_not_exist'),
             icon: 'alert-circle-outline',
-            buttons: [{ text: '返回', onPress: () => router.back() }],
+            buttons: [{ text: t('common.back'), onPress: () => router.back() }],
           });
         }
       });
@@ -142,17 +151,17 @@ export default function AddScreen() {
   }, []);
 
   const suggestions = useMemo(
-    () => existingTags.filter((t) => !tags.includes(t)).slice(0, 6),
+    () => existingTags.filter((tg) => !tags.includes(tg)).slice(0, 6),
     [existingTags, tags]
   );
 
-  const toggleTag = (t: string) => {
-    setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  const toggleTag = (tg: string) => {
+    setTags((prev) => (prev.includes(tg) ? prev.filter((x) => x !== tg) : [...prev, tg]));
   };
 
   const addCustomTag = () => {
-    const t = tagInput.trim();
-    if (t && !tags.includes(t)) setTags([...tags, t]);
+    const tg = tagInput.trim();
+    if (tg && !tags.includes(tg)) setTags([...tags, tg]);
     setTagInput('');
   };
 
@@ -164,8 +173,8 @@ export default function AddScreen() {
         setLoc(info);
       } else {
         showDialog({
-          title: '提示',
-          message: '无法获取位置，请检查权限或手动输入地点名',
+          title: t('common.tip'),
+          message: t('add.location_failed'),
           icon: 'location-outline',
         });
       }
@@ -183,12 +192,12 @@ export default function AddScreen() {
   const onAiRecognize = async (mode: 'food' | 'receipt') => {
     if (!aiConfig.enabled || !aiConfig.apiKey) {
       showDialog({
-        title: 'AI 未启用',
-        message: '请先在「我的 → AI 助手设置」中配置',
+        title: t('add.ai_not_enabled'),
+        message: t('add.ai_not_enabled_msg'),
         icon: 'sparkles-outline',
         buttons: [
-          { text: '取消', style: 'cancel' },
-          { text: '去设置', onPress: () => router.push('/ai-settings') },
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('add.go_settings'), onPress: () => router.push('/ai-settings') },
         ],
       });
       return;
@@ -208,14 +217,14 @@ export default function AddScreen() {
         : await ocrReceipt(aiConfig, uri);
       applyAiResult(result, mode);
       showDialog({
-        title: '识别成功',
-        message: describeResult(result) || '未识别到有效信息，请手动填写',
+        title: t('add.recognize_success'),
+        message: describeResult(result) || t('add.recognize_empty'),
         icon: 'checkmark-circle-outline',
       });
     } catch (e: any) {
       showDialog({
-        title: '识别失败',
-        message: e?.message ?? '未知错误',
+        title: t('add.recognize_failed'),
+        message: e?.message ?? t('common.unknown_error'),
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -240,15 +249,15 @@ export default function AddScreen() {
     setTplVisible(true);
   };
 
-  const applyTemplate = (t: FoodTemplate) => {
-    setAmount(String(t.amount));
-    setMeal(t.meal);
-    setNote(t.name);
-    setTags((prev) => Array.from(new Set([...prev, ...t.tags])));
+  const applyTemplate = (tpl: FoodTemplate) => {
+    setAmount(String(tpl.amount));
+    setMeal(tpl.meal);
+    setNote(tpl.name);
+    setTags((prev) => Array.from(new Set([...prev, ...tpl.tags])));
     setTplVisible(false);
     showDialog({
-      title: '已填入',
-      message: `${t.name} · ¥${t.amount.toFixed(2)}\n可继续修改金额、地点等`,
+      title: t('add.filled'),
+      message: t('add.filled_msg', { name: tpl.name, amount: tpl.amount.toFixed(2) }),
       icon: 'checkmark-circle-outline',
     });
   };
@@ -258,8 +267,8 @@ export default function AddScreen() {
     const value = parseFloat(amount);
     if (!value || value <= 0) {
       showDialog({
-        title: '提示',
-        message: '请输入有效金额',
+        title: t('common.tip'),
+        message: t('add.invalid_amount'),
         icon: 'alert-circle-outline',
       });
       return;
@@ -276,7 +285,11 @@ export default function AddScreen() {
       photo_style: photoStyle,
       photo_shape: photoShape,
       photos_extra: photosExtra,
-      stickers: pastedStickers.length ? JSON.stringify(pastedStickers) : null,
+      stickers: pastedStickers.length
+        ? JSON.stringify(
+            pastedStickers.map((s) => ({ id: s.id, kind: s.kind, label: s.label, uri: s.uri }))
+          )
+        : null,
       latitude: loc?.latitude ?? null,
       longitude: loc?.longitude ?? null,
       location_name: loc ? (finalLocName || null) : null,
@@ -299,8 +312,8 @@ export default function AddScreen() {
     } catch (e: any) {
       navigatingAway.current = false;
       showDialog({
-        title: '保存失败',
-        message: e?.message ?? '未知错误',
+        title: t('add.save_failed'),
+        message: e?.message ?? t('common.unknown_error'),
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -308,16 +321,29 @@ export default function AddScreen() {
     }
   };
 
+  // 跳转到菜谱编辑页（关联当前记录）
+  const onSaveRecipe = () => {
+    if (!editingId) {
+      showDialog({
+        title: t('common.tip'),
+        message: t('add.save_recipe_first'),
+        icon: 'alert-circle-outline',
+      });
+      return;
+    }
+    router.push(`/recipe?recordId=${editingId}`);
+  };
+
   const onDelete = () => {
     if (!editingId) return;
     showDialog({
-      title: '删除记录',
-      message: '确定删除这条记录吗？删除后无法恢复。',
+      title: t('add.delete_record'),
+      message: t('add.delete_record_msg'),
       icon: 'trash-outline',
       buttons: [
-        { text: '取消', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: '删除',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             if (navigatingAway.current) return;
@@ -329,8 +355,8 @@ export default function AddScreen() {
             } catch (e: any) {
               navigatingAway.current = false;
               showDialog({
-                title: '删除失败',
-                message: e?.message ?? '未知错误',
+                title: t('add.delete_failed'),
+                message: e?.message ?? t('common.unknown_error'),
                 icon: 'alert-circle-outline',
               });
             }
@@ -351,7 +377,7 @@ export default function AddScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
             <Tape color="pink" width={20} height={10} rotate={-5} />
-            <Text style={styles.headerTitle}>{editingId ? '修改一笔' : '记一笔'}</Text>
+            <Text style={styles.headerTitle}>{editingId ? t('add.edit_title') : t('add.add_title')}</Text>
           </View>
           {editingId ? (
             <TouchableOpacity
@@ -381,7 +407,7 @@ export default function AddScreen() {
                 onPress={openTemplates}
               >
                 <Ionicons name="bookmark-outline" size={16} color={Colors.ochre} />
-                <Text style={styles.tplBtnText}>速记模板</Text>
+                <Text style={styles.tplBtnText}>{t('add.template')}</Text>
               </TouchableOpacity>
               {aiConfig.enabled ? (
                 <>
@@ -395,7 +421,7 @@ export default function AddScreen() {
                     ) : (
                       <Ionicons name="sparkles" size={16} color={Colors.note} />
                     )}
-                    <Text style={styles.aiBtnText}>AI 识别</Text>
+                    <Text style={styles.aiBtnText}>{t('add.ai_recognize')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.aiBtn2, aiLoading && aiMode === 'receipt' && styles.aiBtn2Active]}
@@ -403,7 +429,7 @@ export default function AddScreen() {
                     disabled={aiLoading}
                   >
                     <Ionicons name="receipt" size={16} color={Colors.olive} />
-                    <Text style={styles.aiBtn2Text}>账单 OCR</Text>
+                    <Text style={styles.aiBtn2Text}>{t('add.ocr')}</Text>
                   </TouchableOpacity>
                 </>
               ) : null}
@@ -412,7 +438,7 @@ export default function AddScreen() {
             {/* 金额纸条 */}
             <PaperCard tape="yellow" rotate={0} padding={18} style={styles.amountCard}>
               <View style={styles.amountHead}>
-                <Text style={styles.amountLabel}>金额</Text>
+                <Text style={styles.amountLabel}>{t('add.amount')}</Text>
                 <Stamp text={activeMeal.stamp} color={activeMeal.color} size={40} />
               </View>
               <View style={styles.amountInputRow}>
@@ -431,13 +457,13 @@ export default function AddScreen() {
 
               {/* 评分 */}
               <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>美味评分</Text>
+                <Text style={styles.ratingLabel}>{t('add.rating')}</Text>
                 <StarRating value={rating} onChange={setRating} size={24} />
               </View>
             </PaperCard>
 
             {/* 餐次 */}
-            <FieldLabel label="餐次" />
+            <FieldLabel label={t('add.meal')} />
             <View style={styles.mealRow}>
               {MEAL_ORDER.map((m) => {
                 const cfg = Meals[m];
@@ -460,7 +486,7 @@ export default function AddScreen() {
                         { color: active ? cfg.color : Colors.inkLight },
                       ]}
                     >
-                      {MEAL_LABELS[m]}
+                      {t(MEAL_T_KEY[m])}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -468,7 +494,7 @@ export default function AddScreen() {
             </View>
 
             {/* 日期 */}
-            <FieldLabel label="日期" />
+            <FieldLabel label={t('add.date')} />
             <View style={styles.dateRow}>
               {[-2, -1, 0].map((offset) => {
                 const d = new Date();
@@ -478,7 +504,7 @@ export default function AddScreen() {
                 const day = String(d.getDate()).padStart(2, '0');
                 const dateStr = `${y}-${m}-${day}`;
                 const active = date === dateStr;
-                const label = offset === 0 ? '今天' : offset === -1 ? '昨天' : '前天';
+                const label = offset === 0 ? t('add.today') : offset === -1 ? t('add.yesterday') : t('add.day_before');
                 return (
                   <TouchableOpacity
                     key={offset}
@@ -503,7 +529,7 @@ export default function AddScreen() {
             </View>
 
             {/* 照片（支持多图） */}
-            <FieldLabel label="美食照片（支持多图）" />
+            <FieldLabel label={t('add.photo')} />
             <PhotoPicker
               uri={photoUri}
               onChange={setPhotoUri}
@@ -521,7 +547,7 @@ export default function AddScreen() {
             />
 
             {/* 地点 */}
-            <FieldLabel label="用餐地点" />
+            <FieldLabel label={t('add.location')} />
             <PaperCard tape="blue" rotate={0} padding={12} showTape={false}>
               <View style={styles.locRow}>
                 <TouchableOpacity
@@ -539,7 +565,7 @@ export default function AddScreen() {
                     />
                   )}
                   <Text style={styles.locBtnText}>
-                    {loc ? '已定位' : '获取位置'}
+                    {loc ? t('add.located') : t('add.get_location')}
                   </Text>
                 </TouchableOpacity>
                 {loc ? (
@@ -555,18 +581,18 @@ export default function AddScreen() {
               </View>
               <TextInput
                 style={styles.locInput}
-                placeholder="地点名（如：楼下小馆、家）"
+                placeholder={t('add.loc_placeholder')}
                 placeholderTextColor={Colors.inkLight}
                 value={locNameInput}
                 onChangeText={setLocNameInput}
               />
               <Text style={styles.locHint}>
-                提示：位置用于"地图足迹"；地点名手动填写更准确
+                {t('add.loc_hint')}
               </Text>
             </PaperCard>
 
             {/* 标签 */}
-            <FieldLabel label="标签" />
+            <FieldLabel label={t('add.tags')} />
             <PaperCard tape="green" rotate={0} padding={12} showTape={false}>
               <View style={styles.tagsRow}>
                 {PRESET_TAGS.map((t) => (
@@ -597,10 +623,10 @@ export default function AddScreen() {
 
               {suggestions.length > 0 ? (
                 <View style={styles.suggestRow}>
-                  <Text style={styles.suggestLabel}>常用：</Text>
+                  <Text style={styles.suggestLabel}>{t('add.common_tags')}</Text>
                   <View style={styles.suggestChips}>
-                    {suggestions.map((t) => (
-                      <Chip key={t} label={t} onPress={() => toggleTag(t)} small />
+                    {suggestions.map((tg) => (
+                      <Chip key={tg} label={tg} onPress={() => toggleTag(tg)} small />
                     ))}
                   </View>
                 </View>
@@ -609,7 +635,7 @@ export default function AddScreen() {
               <View style={styles.customTagRow}>
                 <TextInput
                   style={styles.tagInput}
-                  placeholder="自定义标签…"
+                  placeholder={t('add.custom_tag_placeholder')}
                   placeholderTextColor={Colors.inkLight}
                   value={tagInput}
                   onChangeText={setTagInput}
@@ -623,12 +649,12 @@ export default function AddScreen() {
             </PaperCard>
 
             {/* 备注（手写风格） */}
-            <FieldLabel label="手写备注" />
+            <FieldLabel label={t('add.note')} />
             <PaperCard tape="pink" rotate={0} padding={0} showTape>
               <View style={styles.noteBox}>
                 <View style={styles.noteHeaderRow}>
                   <Ionicons name="create-outline" size={13} color={Colors.ochre} />
-                  <Text style={styles.noteHeaderHint}>菜品 · 口味 · 探店感受</Text>
+                  <Text style={styles.noteHeaderHint}>{t('add.note_hint')}</Text>
                 </View>
                 <View style={styles.noteLinesBg}>
                   {[0, 1, 2, 3].map((i) => (
@@ -637,7 +663,7 @@ export default function AddScreen() {
                 </View>
                 <TextInput
                   style={styles.noteInput}
-                  placeholder="今天这顿…记录你的味笺"
+                  placeholder={t('add.note_placeholder')}
                   placeholderTextColor={Colors.inkLight}
                   value={note}
                   onChangeText={setNote}
@@ -651,14 +677,14 @@ export default function AddScreen() {
             </PaperCard>
 
             {/* 贴纸库 */}
-            <FieldLabel label="贴纸标签（线条 / 分割线 / DIY）" />
+            <FieldLabel label={t('add.sticker_section')} />
             <PaperCard tape="green" rotate={0} padding={12} showTape>
               <TouchableOpacity
                 style={styles.stickerOpenBtn}
                 onPress={() => setStickerLibVisible(true)}
               >
                 <Ionicons name="happy-outline" size={16} color={Colors.olive} />
-                <Text style={styles.stickerOpenText}>打开贴纸库</Text>
+                <Text style={styles.stickerOpenText}>{t('add.open_sticker')}</Text>
                 <Ionicons name="chevron-forward" size={14} color={Colors.inkLight} />
               </TouchableOpacity>
               {pastedStickers.length > 0 ? (
@@ -680,7 +706,7 @@ export default function AddScreen() {
                       </View>
                     ))}
                   </ScrollView>
-                  <Text style={styles.pastedHint}>已贴 {pastedStickers.length} 个</Text>
+                  <Text style={styles.pastedHint}>{t('add.pasted_count', { n: pastedStickers.length })}</Text>
                 </View>
               ) : null}
             </PaperCard>
@@ -693,13 +719,19 @@ export default function AddScreen() {
                 <Ionicons name="trash-outline" size={20} color={Colors.danger} />
               </Pressable>
             ) : null}
+            {editingId ? (
+              <Pressable style={styles.recipeBtn} onPress={onSaveRecipe}>
+                <Ionicons name="book-outline" size={18} color={Colors.olive} />
+                <Text style={styles.recipeBtnText}>{t('add.recipe')}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               style={[styles.saveBtn, editingId ? { flex: 1 } : null]}
               onPress={onSave}
               disabled={saving}
             >
               <Text style={styles.saveBtnText}>
-                {saving ? '保存中…' : editingId ? '保存修改' : '记入账本'}
+                {saving ? t('add.saving') : editingId ? t('add.save_edit') : t('add.save')}
               </Text>
             </Pressable>
           </View>
@@ -710,12 +742,12 @@ export default function AddScreen() {
           <Pressable style={styles.tplOverlay} onPress={() => setTplVisible(false)}>
             <Pressable style={styles.tplSheet} onPress={(e) => e.stopPropagation()}>
               <View style={styles.tplHeader}>
-                <Text style={styles.tplTitle}>速记模板</Text>
+                <Text style={styles.tplTitle}>{t('add.tpl_title')}</Text>
                 <TouchableOpacity onPress={() => setTplVisible(false)}>
                   <Ionicons name="close" size={22} color={Colors.ink} />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.tplHint}>点选一项即可快速填表，无需配置 AI</Text>
+              <Text style={styles.tplHint}>{t('add.tpl_hint')}</Text>
 
               {/* 餐次切换 */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tplMealRow}>
@@ -729,7 +761,7 @@ export default function AddScreen() {
                       onPress={() => setTplMeal(mt)}
                     >
                       <Text style={[styles.tplMealChipText, active && { color: Colors.note }]}>
-                        {m.label}
+                        {t(MEAL_T_KEY[mt])}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -798,8 +830,8 @@ function ExtraPhotosBar({
   const onAdd = async () => {
     if (photos.length >= 6) {
       showDialog({
-        title: '提示',
-        message: '附加照片最多 6 张',
+        title: t('common.tip'),
+        message: t('add.extra_photos_max'),
         icon: 'alert-circle-outline',
       });
       return;
@@ -818,7 +850,7 @@ function ExtraPhotosBar({
     return (
       <TouchableOpacity style={styles.extraAddBtn} onPress={onAdd}>
         <Ionicons name="add-circle-outline" size={16} color={accent} />
-        <Text style={[styles.extraAddText, { color: accent }]}>添加更多照片（拍立得白边）</Text>
+        <Text style={[styles.extraAddText, { color: accent }]}>{t('add.add_more_photos')}</Text>
       </TouchableOpacity>
     );
   }
@@ -840,7 +872,7 @@ function ExtraPhotosBar({
         {photos.length < 6 ? (
           <TouchableOpacity style={styles.extraAddSquare} onPress={onAdd}>
             <Ionicons name="add" size={22} color={Colors.inkLight} />
-            <Text style={styles.extraAddSquareText}>加图</Text>
+            <Text style={styles.extraAddSquareText}>{t('add.add_photo')}</Text>
           </TouchableOpacity>
         ) : null}
       </ScrollView>
@@ -1414,6 +1446,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.ink,
+  },
+  recipeBtn: {
+    width: 64,
+    borderRadius: 4,
+    borderWidth: 1.2,
+    borderStyle: 'dashed',
+    borderColor: Colors.olive,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  recipeBtnText: {
+    fontSize: 11,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+    color: Colors.olive,
+    letterSpacing: 1,
   },
   saveBtnText: {
     color: Colors.note,

@@ -8,14 +8,27 @@ import { StyledPhoto } from './StyledPhoto';
 import { DrawingCanvas } from './DrawingCanvas';
 import { useLedgerStore } from '@/stores/ledger';
 import { cutoutFood } from '@/utils/image';
+import { t, useT } from '@/constants/i18n';
 import {
   PHOTO_STYLES,
-  PHOTO_STYLE_LABELS,
   PHOTO_SHAPES,
-  PHOTO_SHAPE_LABELS,
   type PhotoStyle,
   type PhotoShape,
 } from '@/types';
+
+const PHOTO_STYLE_T_KEY: Record<PhotoStyle, string> = {
+  polaroid: 'photo_style.polaroid',
+  tape: 'photo_style.tape',
+  stamp: 'photo_style.stamp',
+  sketch: 'photo_style.sketch',
+};
+
+const PHOTO_SHAPE_T_KEY: Record<PhotoShape, string> = {
+  square: 'photo_shape.square',
+  rounded: 'photo_shape.rounded',
+  circle: 'photo_shape.circle',
+  heart: 'photo_shape.heart',
+};
 
 // 照片选择器：支持拍照/相册/自绘，应用手账风格框与裁切形状，支持 AI 抠图
 export function PhotoPicker({
@@ -35,20 +48,21 @@ export function PhotoPicker({
   onShapeChange: (s: PhotoShape) => void;
   accent?: string;
 }) {
+  useT(); // subscribe to lang changes for re-render
   const [drawing, setDrawing] = useState(false);
   const [cutting, setCutting] = useState(false);
   const aiConfig = useLedgerStore((s) => s.aiConfig);
 
   const choose = () => {
     showDialog({
-      title: '添加美食照片',
-      message: '选择拍照、相册选取或亲手绘制',
+      title: t('photo.add_title'),
+      message: t('photo.add_msg'),
       icon: 'camera-outline',
       buttons: [
-        { text: '取消', style: 'cancel' },
-        { text: '拍照', onPress: () => doTake() },
-        { text: '相册', onPress: () => doPick() },
-        { text: '自绘', onPress: () => setDrawing(true) },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('photo.camera'), onPress: () => doTake() },
+        { text: t('photo.album'), onPress: () => doPick() },
+        { text: t('photo.draw'), onPress: () => setDrawing(true) },
       ],
     });
   };
@@ -68,10 +82,10 @@ export function PhotoPicker({
     if (!uri) return;
     if (!aiConfig.enabled || !aiConfig.apiKey) {
       showDialog({
-        title: '未启用 AI',
-        message: '请先在「我的 · AI 助手」中配置并启用 AI，再使用抠图功能',
+        title: t('photo.ai_not_enabled'),
+        message: t('photo.ai_not_enabled_msg'),
         icon: 'sparkles-outline',
-        buttons: [{ text: '知道了' }],
+        buttons: [{ text: t('common.got_it') }],
       });
       return;
     }
@@ -80,14 +94,14 @@ export function PhotoPicker({
       const newUri = await cutoutFood(aiConfig, uri);
       onChange(newUri);
       showDialog({
-        title: '抠图完成',
-        message: '已裁剪出美食主体',
+        title: t('photo.cutout_done'),
+        message: t('photo.cutout_done_msg'),
         icon: 'checkmark-circle-outline',
       });
     } catch (e: any) {
       showDialog({
-        title: '抠图失败',
-        message: e?.message ?? '未知错误',
+        title: t('photo.cutout_failed'),
+        message: e?.message ?? t('common.unknown_error'),
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -100,10 +114,10 @@ export function PhotoPicker({
     return (
       <>
         <View style={styles.emptyGrid}>
-          <EntryCard icon="camera" label="拍照" tint={Colors.olive} onPress={doTake} />
-          <EntryCard icon="images-outline" label="相册" tint={Colors.stamp} onPress={doPick} />
-          <EntryCard icon="brush" label="自绘" tint={Colors.ochre} onPress={() => setDrawing(true)} />
-          <EntryCard icon="restaurant-outline" label="暂不添加" tint={Colors.inkLight} onPress={() => {}} muted />
+          <EntryCard icon="camera" label={t('photo.camera')} tint={Colors.olive} onPress={doTake} />
+          <EntryCard icon="images-outline" label={t('photo.album')} tint={Colors.stamp} onPress={doPick} />
+          <EntryCard icon="brush" label={t('photo.draw')} tint={Colors.ochre} onPress={() => setDrawing(true)} />
+          <EntryCard icon="restaurant-outline" label={t('photo.no_photo')} tint={Colors.inkLight} onPress={() => {}} muted />
         </View>
         <DrawingCanvas
           visible={drawing}
@@ -136,28 +150,28 @@ export function PhotoPicker({
           <Ionicons name="close-circle" size={24} color={Colors.danger} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.changeBtn} onPress={choose}>
-          <Text style={styles.changeText}>换一张</Text>
+          <Text style={styles.changeText}>{t('photo.change')}</Text>
         </TouchableOpacity>
       </View>
 
       {/* 风格选择条 */}
       <ChipRow
         icon="color-palette-outline"
-        label="贴图样式"
+        label={t('photo.style')}
         items={PHOTO_STYLES}
-        labels={PHOTO_STYLE_LABELS}
         value={style}
         onChange={(v) => onStyleChange(v as PhotoStyle)}
+        tKeyOf={(s: string) => PHOTO_STYLE_T_KEY[s as PhotoStyle]}
       />
 
       {/* 形状选择条 */}
       <ChipRow
         icon="crop-outline"
-        label="照片形状"
+        label={t('photo.shape')}
         items={PHOTO_SHAPES}
-        labels={PHOTO_SHAPE_LABELS}
         value={shape}
         onChange={(v) => onShapeChange(v as PhotoShape)}
+        tKeyOf={(s: string) => PHOTO_SHAPE_T_KEY[s as PhotoShape]}
       />
 
       {/* AI 抠图按钮 */}
@@ -172,7 +186,7 @@ export function PhotoPicker({
           <Ionicons name="sparkles" size={16} color={Colors.note} />
         )}
         <Text style={styles.cutoutText}>
-          {cutting ? 'AI 抠图中…' : 'AI 抠出美食主体'}
+          {cutting ? t('photo.cutout_loading') : t('photo.cutout')}
         </Text>
       </TouchableOpacity>
 
@@ -193,16 +207,16 @@ function ChipRow({
   icon,
   label,
   items,
-  labels,
   value,
   onChange,
+  tKeyOf,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   items: readonly string[];
-  labels: Record<string, string>;
   value: string;
   onChange: (v: string) => void;
+  tKeyOf: (s: string) => string;
 }) {
   return (
     <View style={styles.styleRow}>
@@ -228,7 +242,7 @@ function ChipRow({
                   active && { color: Colors.stamp, fontWeight: '700' },
                 ]}
               >
-                {labels[s]}
+                {t(tKeyOf(s))}
               </Text>
             </TouchableOpacity>
           );

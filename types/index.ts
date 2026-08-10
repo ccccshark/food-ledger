@@ -47,6 +47,7 @@ export interface LedgerRecord {
   photo_shape?: PhotoShape;        // 照片裁切形状
   photos_extra?: string[];         // 附加照片 URI（photo_uri 为封面/首图）
   stickers?: string;               // 已贴的贴纸 JSON（DIY/线条贴纸）
+  book_id?: number;                // 所属账本 id
 }
 
 // 新建记录入参
@@ -65,6 +66,7 @@ export interface RecordInput {
   photo_shape?: PhotoShape;
   photos_extra?: string[];
   stickers?: string | null;
+  book_id?: number; // 所属账本，默认 1（日常账本）
 }
 
 // 月度统计聚合
@@ -124,3 +126,39 @@ export const QUICK_ENTRIES: QuickEntry[] = [
   { meal: 'snack', label: '零食', icon: 'cookie', color: '#EC4899' },
   { meal: 'supper', label: '夜宵', icon: 'glass', color: '#8B5CF6' },
 ];
+
+// 账本类型
+export type BookKind = 'default' | 'family' | 'diet';
+
+export interface Book {
+  id: number;
+  name: string;
+  kind: BookKind;
+  color: string;        // 胶带颜色标识
+  created_at: number;
+}
+
+// 食谱
+export interface Recipe {
+  id: number;
+  name: string;
+  ingredients: string;   // 逗号分隔，如 "鸡蛋,番茄,盐"
+  steps: string;         // 多行文本，每行一步
+  photo_uri?: string | null;
+  servings: number;      // 份数
+  linked_record_id?: number | null; // 关联的消费记录
+  created_at: number;
+  updated_at: number;
+}
+
+export interface RecipeInput {
+  name: string;
+  ingredients?: string;
+  steps?: string;
+  photo_uri?: string | null;
+  servings?: number;
+  linked_record_id?: number | null;
+}
+
+// 多语言
+export type AppLang = 'zh-CN' | 'zh-TW' | 'ja';

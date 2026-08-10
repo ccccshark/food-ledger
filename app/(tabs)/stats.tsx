@@ -20,9 +20,12 @@ import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider } from '@/components/Decorations';
 import { DonutChart, DonutLegend, MiniBarChart, DonutSegment } from '@/components/DonutChart';
-import { MEAL_ORDER, MEAL_LABELS } from '@/types';
+import { MEAL_ORDER } from '@/types';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
+import type { MealType } from '@/types';
 
 export default function StatsScreen() {
+  const { lang } = useT();
   const monthSummary = useLedgerStore((s) => s.monthSummary);
   const monthRecords = useLedgerStore((s) => s.monthRecords);
   const budget = useLedgerStore((s) => s.budget);
@@ -45,11 +48,12 @@ export default function StatsScreen() {
   const donutData: DonutSegment[] = useMemo(() => {
     if (!monthSummary) return [];
     return MEAL_ORDER.filter((m) => monthSummary.byMeal[m] > 0).map((m) => ({
-      label: MEAL_LABELS[m],
+      label: t(MEAL_T_KEY[m]),
       value: monthSummary.byMeal[m],
       color: Meals[m].color,
     }));
-  }, [monthSummary]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthSummary, lang]);
 
   // 每日柱状图数据
   const barData = useMemo(() => {
@@ -85,7 +89,7 @@ export default function StatsScreen() {
     if (!monthRecords.length) return null;
     // 最贵一餐
     const dearest = [...monthRecords].sort((a, b) => b.amount - a.amount)[0];
-    const dearestMeal = MEAL_LABELS[dearest.meal as keyof typeof MEAL_LABELS] ?? dearest.meal;
+    const dearestMeal = t(MEAL_T_KEY[dearest.meal as MealType]);
     const dearestNote = dearest.note
       ? dearest.note.slice(0, 12).replace(/\n/g, ' ')
       : dearest.location_name?.slice(0, 12) ?? '';
@@ -93,8 +97,8 @@ export default function StatsScreen() {
     const tagCount = new Map<string, number>();
     for (const r of monthRecords) {
       if (!r.tags) continue;
-      for (const t of r.tags.split(',').filter(Boolean)) {
-        tagCount.set(t, (tagCount.get(t) ?? 0) + 1);
+      for (const tg of r.tags.split(',').filter(Boolean)) {
+        tagCount.set(tg, (tagCount.get(tg) ?? 0) + 1);
       }
     }
     const topTagEntry = Array.from(tagCount.entries()).sort((a, b) => b[1] - a[1])[0];
@@ -106,7 +110,7 @@ export default function StatsScreen() {
       mealCount[r.meal] = (mealCount[r.meal] ?? 0) + 1;
     }
     const topMealEntry = Object.entries(mealCount).sort((a, b) => b[1] - a[1])[0];
-    const topMeal = topMealEntry ? MEAL_LABELS[topMealEntry[0] as keyof typeof MEAL_LABELS] : null;
+    const topMeal = topMealEntry ? t(MEAL_T_KEY[topMealEntry[0] as MealType]) : null;
     return {
       dearest,
       dearestMeal,
@@ -117,7 +121,8 @@ export default function StatsScreen() {
       avgPerDay,
       daysWithRecords,
     };
-  }, [monthRecords, avgPerDay, daysWithRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthRecords, avgPerDay, daysWithRecords, lang]);
 
   const monthCN = monthSummary?.month
     ? (() => {
@@ -129,7 +134,7 @@ export default function StatsScreen() {
   return (
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="月度盘点" date={monthCN} />
+        <Header title={t('stats.title')} date={monthCN} />
         <ScrollView
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -137,32 +142,32 @@ export default function StatsScreen() {
           {/* 月度总览 */}
           <View style={styles.px}>
             <PaperCard tape="pink" rotate={-0.5} padding={20} showTape>
-              <Text style={styles.overviewMonth}>{monthCN} · 美食盘点</Text>
+              <Text style={styles.overviewMonth}>{monthCN} · {t('stats.review')}</Text>
               <View style={styles.overviewTotalRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.overviewTotalLabel}>本月支出</Text>
+                  <Text style={styles.overviewTotalLabel}>{t('stats.month_expense')}</Text>
                   <Text style={styles.overviewTotal}>{formatMoney(monthTotal)}</Text>
                 </View>
                 <View style={styles.overviewCountBox}>
                   <Text style={styles.overviewCount}>{monthCount}</Text>
-                  <Text style={styles.overviewCountLabel}>笔</Text>
+                  <Text style={styles.overviewCountLabel}>{t('stats.count_unit')}</Text>
                 </View>
               </View>
               <DashedDivider />
               <View style={styles.overviewRow}>
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewItemValue}>{formatMoney(avgPerRecord)}</Text>
-                  <Text style={styles.overviewItemLabel}>笔均</Text>
+                  <Text style={styles.overviewItemLabel}>{t('stats.per_record')}</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewItemValue}>{formatMoney(avgPerDay)}</Text>
-                  <Text style={styles.overviewItemLabel}>日均</Text>
+                  <Text style={styles.overviewItemLabel}>{t('stats.per_day')}</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewItemValue}>{daysWithRecords}</Text>
-                  <Text style={styles.overviewItemLabel}>天有记</Text>
+                  <Text style={styles.overviewItemLabel}>{t('stats.days_with_record')}</Text>
                 </View>
               </View>
             </PaperCard>
@@ -174,33 +179,33 @@ export default function StatsScreen() {
               <PaperCard tape="green" rotate={0.5} padding={18} showTape>
                 <View style={styles.cardTitleRow}>
                   <Tape color="yellow" width={14} height={9} rotate={-6} />
-                  <Text style={styles.cardTitle}>预算进度</Text>
+                  <Text style={styles.cardTitle}>{t('stats.budget_progress')}</Text>
                 </View>
                 <View style={styles.budgetRingRow}>
                   <DonutChart
                     data={[
                       {
-                        label: '已用',
+                        label: t('stats.used'),
                         value: monthTotal,
                         color: budgetUsed >= 100 ? Colors.danger : Colors.olive,
                       },
                     ]}
                     size={120}
                     strokeWidth={14}
-                    centerLabel="已用"
+                    centerLabel={t('stats.used')}
                     centerValue={`${budgetUsed.toFixed(0)}%`}
-                    centerSub={`预算 ${formatMoney(budget)}`}
+                    centerSub={t('stats.budget_sub', { n: formatMoney(budget) })}
                   />
                   <View style={styles.budgetInfoCol}>
                     <View style={styles.budgetInfoItem}>
-                      <Text style={styles.budgetInfoLabel}>已支出</Text>
+                      <Text style={styles.budgetInfoLabel}>{t('stats.spent')}</Text>
                       <Text style={[styles.budgetInfoValue, { color: Colors.ink }]}>
                         {formatMoney(monthTotal)}
                       </Text>
                     </View>
                     <View style={styles.budgetInfoItem}>
                       <Text style={styles.budgetInfoLabel}>
-                        {budgetLeft > 0 ? '剩余' : '超支'}
+                        {budgetLeft > 0 ? t('stats.remaining') : t('stats.over')}
                       </Text>
                       <Text
                         style={[
@@ -220,8 +225,8 @@ export default function StatsScreen() {
           {!hasData ? (
             <Empty
               icon="bar-chart-outline"
-              text="本月尚无记录"
-              hint="开始记账后这里会显示盘点图表"
+              text={t('stats.empty_text')}
+              hint={t('stats.empty_hint')}
             />
           ) : (
             <>
@@ -231,16 +236,16 @@ export default function StatsScreen() {
                   <PaperCard tape="yellow" rotate={0} padding={18} showTape>
                     <View style={styles.cardTitleRow}>
                       <Tape color="pink" width={14} height={9} rotate={-6} />
-                      <Text style={styles.cardTitle}>餐次分布</Text>
+                      <Text style={styles.cardTitle}>{t('stats.meal_dist')}</Text>
                     </View>
                     <View style={styles.donutRow}>
                       <DonutChart
                         data={donutData}
                         size={180}
                         strokeWidth={26}
-                        centerLabel="总支出"
+                        centerLabel={t('stats.total_expense')}
                         centerValue={`¥${monthTotal.toFixed(0)}`}
-                        centerSub={`${monthCount} 笔`}
+                        centerSub={t('stats.count_summary', { n: monthCount })}
                       />
                     </View>
                     <DonutLegend data={donutData} total={donutTotal} />
@@ -254,10 +259,10 @@ export default function StatsScreen() {
                   <PaperCard tape="blue" rotate={0} padding={16} showTape>
                     <View style={styles.cardTitleRow}>
                       <Tape color="green" width={14} height={9} rotate={-6} />
-                      <Text style={styles.cardTitle}>每日支出</Text>
+                      <Text style={styles.cardTitle}>{t('stats.daily_expense')}</Text>
                       {maxDaySpending ? (
                         <Text style={styles.cardSub}>
-                          最高 {maxDaySpending.label} 日 ¥{maxDaySpending.value.toFixed(0)}
+                          {t('stats.max_day', { day: maxDaySpending.label, amount: maxDaySpending.value.toFixed(0) })}
                         </Text>
                       ) : null}
                     </View>
@@ -274,17 +279,17 @@ export default function StatsScreen() {
                   <PaperCard tape="pink" rotate={0} padding={16} showTape>
                     <View style={styles.cardTitleRow}>
                       <Tape color="blue" width={14} height={9} rotate={-6} />
-                      <Text style={styles.cardTitle}>标签排行</Text>
+                      <Text style={styles.cardTitle}>{t('stats.tag_rank')}</Text>
                     </View>
                     <View style={styles.tagBars}>
-                      {monthSummary.topTags.map((t, i) => {
+                      {monthSummary.topTags.map((tg, i) => {
                         const max = monthSummary.topTags[0].total;
-                        const ratio = max > 0 ? t.total / max : 0;
+                        const ratio = max > 0 ? tg.total / max : 0;
                         return (
-                          <View key={t.tag} style={styles.tagBarRow}>
+                          <View key={tg.tag} style={styles.tagBarRow}>
                             <Text style={styles.tagRank}>{toCNNumber(i + 1)}</Text>
                             <Text style={styles.tagBarName} numberOfLines={1}>
-                              {t.tag}
+                              {tg.tag}
                             </Text>
                             <View style={styles.tagBarTrack}>
                               <View
@@ -298,7 +303,7 @@ export default function StatsScreen() {
                                 ]}
                               />
                             </View>
-                            <Text style={styles.tagBarValue}>{formatMoney(t.total)}</Text>
+                            <Text style={styles.tagBarValue}>{formatMoney(tg.total)}</Text>
                           </View>
                         );
                       })}
@@ -313,12 +318,12 @@ export default function StatsScreen() {
                   <PaperCard tape="yellow" rotate={0} padding={16} showTape>
                     <View style={styles.cardTitleRow}>
                       <Tape color="pink" width={14} height={9} rotate={-6} />
-                      <Text style={styles.cardTitle}>本月小结</Text>
+                      <Text style={styles.cardTitle}>{t('stats.month_brief')}</Text>
                     </View>
                     <View style={styles.briefBox}>
                       <Text style={styles.briefLine}>
                         <Text style={styles.briefBullet}>·</Text>
-                        <Text style={styles.briefKey}> 最贵一餐 </Text>
+                        <Text style={styles.briefKey}> {t('stats.dearest')} </Text>
                         <Text style={styles.briefVal}>
                           {brief.dearestMeal} ¥{brief.dearest.amount.toFixed(2)}
                         </Text>
@@ -328,21 +333,21 @@ export default function StatsScreen() {
                       </Text>
                       <Text style={styles.briefLine}>
                         <Text style={styles.briefBullet}>·</Text>
-                        <Text style={styles.briefKey}> 高频品类 </Text>
+                        <Text style={styles.briefKey}> {t('stats.top_category')} </Text>
                         <Text style={styles.briefVal}>
                           {brief.topTag
-                            ? `${brief.topTag}（${brief.topTagCount}次）`
+                            ? t('stats.tag_count', { tag: brief.topTag, n: brief.topTagCount })
                             : brief.topMeal
-                            ? `${brief.topMeal}为主`
-                            : '暂无标签'}
+                            ? t('stats.top_meal_main', { n: brief.topMeal })
+                            : t('stats.no_tag')}
                         </Text>
                       </Text>
                       <Text style={styles.briefLine}>
                         <Text style={styles.briefBullet}>·</Text>
-                        <Text style={styles.briefKey}> 日均开销 </Text>
+                        <Text style={styles.briefKey}> {t('stats.daily_avg')} </Text>
                         <Text style={styles.briefVal}>{formatMoney(brief.avgPerDay)}</Text>
                         <Text style={styles.briefNote}>
-                          {' '}· {brief.daysWithRecords}天有记
+                          {' '}· {t('stats.days_with_record_count', { n: brief.daysWithRecords })}
                         </Text>
                       </Text>
                     </View>

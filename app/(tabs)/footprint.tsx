@@ -19,6 +19,7 @@ import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, InkDot } from '@/components/Decorations';
 import { StyledPhoto } from '@/components/StyledPhoto';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
 import type { LedgerRecord, MealType, LocationAgg } from '@/types';
 import Svg, { Path as SvgPath, Circle as SvgCircle } from 'react-native-svg';
 
@@ -35,6 +36,7 @@ const TIMELINE_BULGE = 16;                     // 路径弯曲幅度
 const TIMELINE_CARD_GAP = 24;                  // 节点与卡片的间距
 
 export default function FootprintScreen() {
+  const { t } = useT();
   const allRecords = useLedgerStore((s) => s.allRecords);
   const locations = useLedgerStore((s) => s.locations);
   const refreshAllRecords = useLedgerStore((s) => s.refreshAllRecords);
@@ -84,7 +86,7 @@ export default function FootprintScreen() {
   return (
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="美食足迹" date={viewMode === 'wall' ? '贴图墙' : '时间轴'} />
+        <Header title={t('footprint.title')} date={viewMode === 'wall' ? t('footprint.wall') : t('footprint.timeline')} />
         <ScrollView
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -95,22 +97,22 @@ export default function FootprintScreen() {
               <View style={styles.overviewRow}>
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewValue}>{totalCount}</Text>
-                  <Text style={styles.overviewLabel}>笔记录</Text>
+                  <Text style={styles.overviewLabel}>{t('footprint.records')}</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewValue}>{photoCount}</Text>
-                  <Text style={styles.overviewLabel}>张照片</Text>
+                  <Text style={styles.overviewLabel}>{t('footprint.photos')}</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewValue}>{locations.length}</Text>
-                  <Text style={styles.overviewLabel}>个地点</Text>
+                  <Text style={styles.overviewLabel}>{t('footprint.places')}</Text>
                 </View>
                 <View style={styles.overviewDivider} />
                 <View style={styles.overviewItem}>
                   <Text style={styles.overviewValue}>{formatMoney(totalAmount)}</Text>
-                  <Text style={styles.overviewLabel}>累计</Text>
+                  <Text style={styles.overviewLabel}>{t('footprint.cumulative')}</Text>
                 </View>
               </View>
             </PaperCard>
@@ -121,13 +123,13 @@ export default function FootprintScreen() {
             <View style={styles.switchRow}>
               <SwitchBtn
                 icon="grid-outline"
-                label="贴图墙"
+                label={t('footprint.wall')}
                 active={viewMode === 'wall'}
                 onPress={() => setViewMode('wall')}
               />
               <SwitchBtn
                 icon="git-branch-outline"
-                label="时间轴"
+                label={t('footprint.timeline')}
                 active={viewMode === 'timeline'}
                 onPress={() => setViewMode('timeline')}
               />
@@ -137,9 +139,9 @@ export default function FootprintScreen() {
           {allRecords.length === 0 ? (
             <Empty
               icon="images-outline"
-              text="贴图墙还是空的"
-              hint="记一笔美食并添加照片，就会出现在这里"
-              actionLabel="去记一笔"
+              text={t('footprint.empty_text')}
+              hint={t('footprint.empty_hint')}
+              actionLabel={t('footprint.empty_action')}
               onAction={() => router.push('/add')}
             />
           ) : viewMode === 'wall' ? (
@@ -148,8 +150,8 @@ export default function FootprintScreen() {
               <View style={styles.px}>
                 <View style={styles.sectionTitleRow}>
                   <Tape color="yellow" width={16} height={10} rotate={-6} />
-                  <Text style={styles.sectionTitle}>美食贴图墙</Text>
-                  <Text style={styles.sectionSub}>点击可编辑</Text>
+                  <Text style={styles.sectionTitle}>{t('footprint.wall_section')}</Text>
+                  <Text style={styles.sectionSub}>{t('footprint.tap_edit')}</Text>
                 </View>
               </View>
               <View style={styles.boardWrap}>
@@ -170,8 +172,8 @@ export default function FootprintScreen() {
             <View style={styles.timelineWrap}>
               <View style={styles.sectionTitleRow}>
                 <Tape color="green" width={16} height={10} rotate={-6} />
-                <Text style={styles.sectionTitle}>美味足迹</Text>
-                <Text style={styles.sectionSub}>{monthGroups.length} 个月</Text>
+                <Text style={styles.sectionTitle}>{t('footprint.timeline_section')}</Text>
+                <Text style={styles.sectionSub}>{t('footprint.months_count', { n: monthGroups.length })}</Text>
               </View>
               {monthGroups.map((g) => (
                 <TimelineMonth key={g.month} month={g.month} records={g.records} />
@@ -184,8 +186,8 @@ export default function FootprintScreen() {
             <View style={styles.px}>
               <View style={styles.sectionTitleRow}>
                 <Tape color="green" width={16} height={10} rotate={-6} />
-                <Text style={styles.sectionTitle}>地点清单</Text>
-                <Text style={styles.sectionSub}>{locations.length} 处</Text>
+                <Text style={styles.sectionTitle}>{t('footprint.location_section')}</Text>
+                <Text style={styles.sectionSub}>{t('footprint.places_count', { n: locations.length })}</Text>
               </View>
               <PaperCard tape="blue" rotate={0} padding={0} showTape>
                 {locations.map((l, i) => (
@@ -266,7 +268,7 @@ function TimelineMonth({
         </View>
         <View style={styles.monthMetaChip}>
           <Text style={styles.monthMetaText}>
-            {records.length} 笔 · {formatMoney(monthTotal)}
+            {t('footprint.month_count', { n: records.length, amount: formatMoney(monthTotal) })}
           </Text>
         </View>
       </View>
@@ -358,7 +360,7 @@ function TimelineCard({ record, side }: { record: LedgerRecord; side: -1 | 1 }) 
         <View style={styles.tcTop}>
           <Text style={styles.tcAmount}>¥{record.amount.toFixed(0)}</Text>
           <View style={[styles.tcMeal, { borderColor: meal.color }]}>
-            <Text style={[styles.tcMealText, { color: meal.color }]}>{meal.label}</Text>
+            <Text style={[styles.tcMealText, { color: meal.color }]}>{t(MEAL_T_KEY[record.meal as MealType])}</Text>
           </View>
         </View>
         <Text style={styles.tcDate} numberOfLines={1}>
@@ -409,7 +411,7 @@ function StickerCard({ record, index }: { record: LedgerRecord; index: number })
           <View style={[styles.stickerPlaceholder, { backgroundColor: meal.color + '18' }]}>
             <Ionicons name="restaurant" size={32} color={meal.color} />
             <Text style={[styles.stickerPlaceholderText, { color: meal.color }]}>
-              {meal.label}
+              {t(MEAL_T_KEY[record.meal as MealType])}
             </Text>
           </View>
         )}
@@ -427,7 +429,7 @@ function StickerCard({ record, index }: { record: LedgerRecord; index: number })
           ) : null}
         </View>
         <Text style={styles.stickerDate}>
-          {toCNNumber(m)}月{toCNNumber(d)}日 · {meal.label}
+          {toCNNumber(m)}月{toCNNumber(d)}日 · {t(MEAL_T_KEY[record.meal as MealType])}
         </Text>
         {record.location_name ? (
           <View style={styles.stickerLocRow}>
@@ -444,9 +446,9 @@ function StickerCard({ record, index }: { record: LedgerRecord; index: number })
         ) : null}
         {tags.length > 0 ? (
           <View style={styles.stickerTagsRow}>
-            {tags.slice(0, 2).map((t) => (
-              <View key={t} style={[styles.stickerTag, { borderColor: meal.color }]}>
-                <Text style={[styles.stickerTagText, { color: meal.color }]}>#{t}</Text>
+            {tags.slice(0, 2).map((tg) => (
+              <View key={tg} style={[styles.stickerTag, { borderColor: meal.color }]}>
+                <Text style={[styles.stickerTagText, { color: meal.color }]}>#{tg}</Text>
               </View>
             ))}
           </View>
@@ -470,15 +472,15 @@ function LocationRow({ loc, last }: { loc: LocationAgg; last: boolean }) {
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.locName} numberOfLines={1}>
-          {loc.location_name || '未命名地点'}
+          {loc.location_name || t('footprint.unnamed')}
         </Text>
         <View style={styles.locMeta}>
           <InkDot color={Colors.olive} size={6} />
-          <Text style={styles.locMetaText}>{loc.count} 次打卡</Text>
+          <Text style={styles.locMetaText}>{t('footprint.checkin_count', { n: loc.count })}</Text>
           <Text style={styles.locDot}>·</Text>
           <Text style={styles.locMetaText}>{formatMoney(loc.total)}</Text>
         </View>
-        <Text style={styles.locLast}>最近 {loc.last_date}</Text>
+        <Text style={styles.locLast}>{t('footprint.last_visit', { date: loc.last_date })}</Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={Colors.inkLight} />
     </View>

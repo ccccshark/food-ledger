@@ -5,6 +5,9 @@ import {
   View,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -15,24 +18,61 @@ import { Colors, Fonts, formatMoney, toCNNumber } from '@/constants/theme';
 import { Header } from '@/components/Header';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, Stamp } from '@/components/Decorations';
+import { t, useT } from '@/constants/i18n';
+import { useI18nStore } from '@/stores/i18n';
+import type { AppLang } from '@/types';
 import * as dao from '@/db';
-import { exportRecordsCsv, backupSqlite, exportJournalHtml } from '@/utils/export';
+import {
+  exportRecordsCsv,
+  backupSqlite,
+  exportJournalHtml,
+  restoreSqlite,
+  importRecordsCsv,
+} from '@/utils/export';
+
+const LANG_OPTIONS: AppLang[] = ['zh-CN', 'zh-TW', 'ja'];
 
 export default function ProfileScreen() {
+  const { t, lang } = useT();
+  const setLang = useI18nStore((s) => s.setLang);
   const budget = useLedgerStore((s) => s.budget);
   const monthlyTotals = useLedgerStore((s) => s.monthlyTotals);
   const refreshBudget = useLedgerStore((s) => s.refreshBudget);
   const refreshMonthlyTotals = useLedgerStore((s) => s.refreshMonthlyTotals);
   const aiConfig = useLedgerStore((s) => s.aiConfig);
   const refreshAiConfig = useLedgerStore((s) => s.refreshAiConfig);
+  const books = useLedgerStore((s) => s.books);
+  const currentBookId = useLedgerStore((s) => s.currentBookId);
+  const refreshBooks = useLedgerStore((s) => s.refreshBooks);
+  const setCurrentBook = useLedgerStore((s) => s.setCurrentBook);
 
   const [exporting, setExporting] = useState<null | 'csv' | 'pdf' | 'db'>(null);
+  const [aboutExpanded, setAboutExpanded] = useState(false);
+  const [bookSwitcherVisible, setBookSwitcherVisible] = useState(false);
 
   useEffect(() => {
     refreshBudget();
     refreshMonthlyTotals();
     refreshAiConfig();
+    refreshBooks();
   }, []);
+
+  const currentBook = books.find((b) => b.id === currentBookId);
+  const bookKindLabel = (kind?: string): string =>
+    kind === 'family'
+      ? t('profile.book_kind.family')
+      : kind === 'diet'
+      ? t('profile.book_kind.diet')
+      : t('profile.book_kind.default');
+  const TAPE_COLOR_MAP: Record<string, string> = {
+    yellow: Colors.tapeYellow,
+    pink: Colors.tapePink,
+    green: Colors.tapeGreen,
+    blue: Colors.tapeBlue,
+  };
+  type TapeColor = 'yellow' | 'pink' | 'green' | 'blue';
+  const bookTape = (c?: string): TapeColor =>
+    c === 'pink' || c === 'green' || c === 'blue' ? c : 'yellow';
 
   const totalAll = monthlyTotals.reduce((s, m) => s + m.total, 0);
   const totalMonths = monthlyTotals.length;
@@ -49,8 +89,8 @@ export default function ProfileScreen() {
         const all = await dao.listAllRecords();
         if (all.length === 0) {
           showDialog({
-            title: '提示',
-            message: '还没有任何记录可以导出',
+            title: t('common.tip'),
+            message: t('profile.no_records_export'),
             icon: 'alert-circle-outline',
           });
           return;
@@ -65,8 +105,8 @@ export default function ProfileScreen() {
       }
     } catch (e: any) {
       showDialog({
-        title: '导出失败',
-        message: e?.message ?? '未知错误',
+        title: t('profile.export_failed'),
+        message: e?.message ?? t('common.unknown_error'),
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -78,10 +118,82 @@ export default function ProfileScreen() {
   const onExportPdf = () => runExport('pdf', () => exportJournalHtml([]), true);
   const onBackupDb = () => runExport('db', () => backupSqlite(), false);
 
+  // 导入数据库：会覆盖现有数据，需二次确认 + 完成后重启数据加载
+  const onRestoreDb = () => {
+    showDialog({
+      title: t('profile.restore_db_title'),
+      message: t('profile.restore_db_msg'),
+      icon: 'server-outline',
+      buttons: [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('profile.choose_file_restore'),
+          onPress: async () => {
+            try {
+              await restoreSqlite();
+              showDialog({
+                title: t('profile.restore_done'),
+                message: t('profile.restore_done_msg'),
+                icon: 'checkmark-circle-outline',
+              });
+            } catch (e: any) {
+              showDialog({
+                title: t('profile.restore_failed'),
+                message: e?.message ?? t('common.unknown_error'),
+                icon: 'alert-circle-outline',
+              });
+            }
+          },
+        },
+      ],
+    });
+  };
+
+  // 导入 CSV：逐条追加，不覆盖现有数据
+  const onImportCsv = async () => {
+    if (exporting) return;
+    setExporting('csv');
+    try {
+      const count = await importRecordsCsv();
+      if (count === 0) {
+        showDialog({
+          title: t('common.tip'),
+          message: t('profile.empty_file'),
+          icon: 'alert-circle-outline',
+        });
+        return;
+      }
+      // 刷新所有数据
+      await Promise.all([
+        useLedgerStore.getState().refreshToday(),
+        useLedgerStore.getState().refreshMonth(),
+        useLedgerStore.getState().refreshAllRecords(),
+        useLedgerStore.getState().refreshRecentDaily(),
+        useLedgerStore.getState().refreshTags(),
+        useLedgerStore.getState().refreshLocations(),
+        useLedgerStore.getState().refreshMonthCalendar(),
+        useLedgerStore.getState().refreshMonthlyTotals(),
+      ]);
+      showDialog({
+        title: t('profile.import_success'),
+        message: t('profile.import_success_msg', { n: count }),
+        icon: 'checkmark-circle-outline',
+      });
+    } catch (e: any) {
+      showDialog({
+        title: t('profile.import_failed'),
+        message: e?.message ?? t('common.unknown_error'),
+        icon: 'alert-circle-outline',
+      });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const onOpenBudget = () => {
     showDialog({
-      title: '设定月度预算',
-      message: '设为 0 即关闭预算提醒',
+      title: t('profile.set_budget'),
+      message: t('profile.set_budget_msg'),
       icon: 'wallet-outline',
       input: {
         placeholder: '0.00',
@@ -90,16 +202,16 @@ export default function ProfileScreen() {
         prefix: '¥',
       },
       buttons: [
-        { text: '取消', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: '保存',
+          text: t('common.save'),
           onPress: async () => {
             const raw = useDialogStore.getState().inputValue;
             const v = parseFloat(raw);
             if (isNaN(v) || v < 0) {
               showDialog({
-                title: '提示',
-                message: '请输入有效金额',
+                title: t('common.tip'),
+                message: t('profile.invalid_amount'),
                 icon: 'alert-circle-outline',
               });
               return;
@@ -114,8 +226,53 @@ export default function ProfileScreen() {
   return (
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="我的手账" date="数据存于本机" />
+        <Header title={t('profile.title')} date={t('profile.data_local')} />
         <View style={styles.body}>
+          {/* 我的账本（多账本切换） */}
+          <PaperCard tape={bookTape(currentBook?.color)} rotate={-0.5} padding={16} showTape>
+            <View style={styles.cardTitleRow}>
+              <Tape color={bookTape(currentBook?.color)} width={14} height={9} rotate={-6} />
+              <Text style={styles.cardTitle}>{t('profile.my_books')}</Text>
+              <TouchableOpacity
+                style={{ marginLeft: 'auto' }}
+                onPress={() => router.push('/books')}
+              >
+                <Text style={styles.manageLink}>{t('profile.manage')}</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.currentBookRow}
+              onPress={() => setBookSwitcherVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.bookDot, { backgroundColor: TAPE_COLOR_MAP[currentBook?.color ?? 'yellow'] ?? Colors.tapeYellow }]}/>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bookName}>{currentBook?.name ?? t('profile.default_book')}</Text>
+                <Text style={styles.bookHint}>
+                  {t('profile.book_hint', { kind: bookKindLabel(currentBook?.kind) })}
+                </Text>
+              </View>
+              <Ionicons name="swap-horizontal" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+          </PaperCard>
+
+          {/* 食谱手帐 */}
+          <PaperCard tape="green" rotate={0.5} padding={16} showTape>
+            <TouchableOpacity
+              style={styles.rowBtn}
+              onPress={() => router.push('/recipes')}
+            >
+              <View style={[styles.iconBox, { borderColor: Colors.olive }]}>
+                <Ionicons name="book-outline" size={18} color={Colors.olive} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{t('profile.recipe_journal')}</Text>
+                <Text style={styles.rowHint}>{t('profile.recipe_hint')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+          </PaperCard>
+
           {/* 预算 */}
           <PaperCard tape="pink" rotate={-0.5} padding={16} showTape>
             <TouchableOpacity
@@ -126,9 +283,9 @@ export default function ProfileScreen() {
                 <Ionicons name="wallet-outline" size={18} color={Colors.stamp} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>月度预算</Text>
+                <Text style={styles.rowTitle}>{t('profile.monthly_budget')}</Text>
                 <Text style={styles.rowHint}>
-                  {budget > 0 ? formatMoney(budget) : '未设置 · 点击设定'}
+                  {budget > 0 ? formatMoney(budget) : t('profile.budget_not_set')}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
@@ -145,11 +302,11 @@ export default function ProfileScreen() {
                 <Ionicons name="sparkles" size={18} color={Colors.ochre} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>AI 助手</Text>
+                <Text style={styles.rowTitle}>{t('profile.ai_assistant')}</Text>
                 <Text style={styles.rowHint}>
                   {aiConfig.enabled
-                    ? `已启用 · ${aiConfig.model}`
-                    : '未启用 · 点击配置识别'}
+                    ? t('profile.ai_enabled', { model: aiConfig.model })
+                    : t('profile.ai_not_enabled')}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
@@ -160,17 +317,17 @@ export default function ProfileScreen() {
           <PaperCard tape="yellow" rotate={0.5} padding={16} showTape>
             <View style={styles.cardTitleRow}>
               <Tape color="green" width={14} height={9} rotate={-6} />
-              <Text style={styles.cardTitle}>累计所记</Text>
+              <Text style={styles.cardTitle}>{t('profile.cumulative')}</Text>
             </View>
             <View style={styles.statRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{formatMoney(totalAll)}</Text>
-                <Text style={styles.statLabel}>累计支出</Text>
+                <Text style={styles.statLabel}>{t('profile.cumulative_expense')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{toCNNumber(totalMonths)}</Text>
-                <Text style={styles.statLabel}>记账月数</Text>
+                <Text style={styles.statLabel}>{t('profile.bookkeeping_months')}</Text>
               </View>
             </View>
 
@@ -199,7 +356,13 @@ export default function ProfileScreen() {
           <PaperCard tape="blue" rotate={-0.5} padding={16} showTape>
             <View style={styles.cardTitleRow}>
               <Tape color="blue" width={14} height={9} rotate={-6} />
-              <Text style={styles.cardTitle}>数据管理</Text>
+              <Text style={styles.cardTitle}>{t('profile.data_mgmt')}</Text>
+            </View>
+
+            {/* 导出小节 */}
+            <View style={styles.sectionLabelRow}>
+              <Ionicons name="download-outline" size={12} color={Colors.inkLight} />
+              <Text style={styles.sectionLabel}>{t('profile.export_backup')}</Text>
             </View>
 
             {/* CSV 账单表格 */}
@@ -216,8 +379,8 @@ export default function ProfileScreen() {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>导出 CSV 账单</Text>
-                <Text style={styles.rowHint}>表格形式 · 可用 Excel 打开</Text>
+                <Text style={styles.rowTitle}>{t('profile.export_csv')}</Text>
+                <Text style={styles.rowHint}>{t('profile.export_csv_hint')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
             </TouchableOpacity>
@@ -238,8 +401,8 @@ export default function ProfileScreen() {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>导出 PDF 手帐</Text>
-                <Text style={styles.rowHint}>按月汇总 · 浏览器打印为 PDF</Text>
+                <Text style={styles.rowTitle}>{t('profile.export_pdf')}</Text>
+                <Text style={styles.rowHint}>{t('profile.export_pdf_hint')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
             </TouchableOpacity>
@@ -260,48 +423,179 @@ export default function ProfileScreen() {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>本地数据库备份</Text>
-                <Text style={styles.rowHint}>SQLite 整库 · 可用于恢复</Text>
+                <Text style={styles.rowTitle}>{t('profile.backup_db')}</Text>
+                <Text style={styles.rowHint}>{t('profile.backup_db_hint')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+
+            {/* 导入小节 */}
+            <View style={[styles.sectionLabelRow, { marginTop: 14 }]}>
+              <Ionicons name="cloud-upload-outline" size={12} color={Colors.inkLight} />
+              <Text style={styles.sectionLabel}>{t('profile.import_restore')}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.rowBtn, styles.exportRow]}
+              onPress={onImportCsv}
+              disabled={exporting !== null}
+            >
+              <View style={[styles.iconBox, { borderColor: Colors.olive }]}>
+                {exporting === 'csv' ? (
+                  <ActivityIndicator size="small" color={Colors.olive} />
+                ) : (
+                  <Ionicons name="cloud-upload-outline" size={18} color={Colors.olive} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{t('profile.import_csv')}</Text>
+                <Text style={styles.rowHint}>{t('profile.import_csv_hint')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+
+            <DashedDivider />
+
+            <TouchableOpacity
+              style={[styles.rowBtn, styles.exportRow]}
+              onPress={onRestoreDb}
+              disabled={exporting !== null}
+            >
+              <View style={[styles.iconBox, { borderColor: Colors.ochre }]}>
+                <Ionicons name="server-outline" size={18} color={Colors.ochre} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{t('profile.restore_db')}</Text>
+                <Text style={styles.rowHint}>{t('profile.restore_db_hint')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
             </TouchableOpacity>
           </PaperCard>
 
-          {/* 关于 */}
+          {/* 语言切换入口 */}
+          <PaperCard tape="green" rotate={0.5} padding={16} showTape>
+            <TouchableOpacity
+              style={styles.rowBtn}
+              onPress={() => {
+                showDialog({
+                  title: t('lang.title'),
+                  buttons: LANG_OPTIONS.map((l) => ({
+                    text: t(`lang.${l}`),
+                    style: l === lang ? ('default' as const) : ('cancel' as const),
+                    onPress: () => setLang(l),
+                  })),
+                });
+              }}
+            >
+              <View style={[styles.iconBox, { borderColor: Colors.olive }]}>
+                <Ionicons name="language-outline" size={18} color={Colors.olive} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{t('lang.title')}</Text>
+                <Text style={styles.rowHint}>{t(`lang.${lang}`)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.inkLight} />
+            </TouchableOpacity>
+          </PaperCard>
+
+          {/* 关于（折叠式） */}
           <PaperCard tape="pink" rotate={0.5} padding={16} showTape>
-            <View style={styles.cardTitleRow}>
+            <TouchableOpacity
+              style={styles.aboutHeader}
+              onPress={() => setAboutExpanded((v) => !v)}
+              activeOpacity={0.7}
+            >
               <Tape color="pink" width={14} height={9} rotate={-6} />
-              <Text style={styles.cardTitle}>关于</Text>
-            </View>
-            <Text style={styles.aboutIntro}>
-              味笺是一本属于你的本地美食记账本。用拍立得、胶带贴图、邮票、手绘框记录每一餐，用双列贴图墙留住美味足迹。
-            </Text>
-            <DashedDivider />
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutKey}>版本</Text>
-              <Text style={styles.aboutVal}>v1.3.0 · 味笺</Text>
-            </View>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutKey}>存储</Text>
-              <Text style={styles.aboutVal}>本地 SQLite · 仅存于本机</Text>
-            </View>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutKey}>AI</Text>
-              <Text style={styles.aboutVal}>可选启用 · 识别美食 / 抠图 / 账单</Text>
-            </View>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutKey}>隐私</Text>
-              <Text style={styles.aboutVal}>数据不会上传任何服务器</Text>
-            </View>
+              <Text style={styles.cardTitle}>{t('profile.about')}</Text>
+              <Text style={styles.aboutVersionTag}>v1.3.0</Text>
+              <Ionicons
+                name={aboutExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={Colors.inkLight}
+              />
+            </TouchableOpacity>
+            {aboutExpanded ? (
+              <>
+                <Text style={styles.aboutIntro}>
+                  {t('profile.about_intro')}
+                </Text>
+                <DashedDivider />
+                <View style={styles.aboutRow}>
+                  <Text style={styles.aboutKey}>{t('profile.version')}</Text>
+                  <Text style={styles.aboutVal}>{t('profile.version_val')}</Text>
+                </View>
+                <View style={styles.aboutRow}>
+                  <Text style={styles.aboutKey}>{t('profile.storage')}</Text>
+                  <Text style={styles.aboutVal}>{t('profile.storage_val')}</Text>
+                </View>
+                <View style={styles.aboutRow}>
+                  <Text style={styles.aboutKey}>{t('profile.ai_label')}</Text>
+                  <Text style={styles.aboutVal}>{t('profile.ai_val')}</Text>
+                </View>
+                <View style={styles.aboutRow}>
+                  <Text style={styles.aboutKey}>{t('profile.privacy')}</Text>
+                  <Text style={styles.aboutVal}>{t('profile.privacy_val')}</Text>
+                </View>
+              </>
+            ) : null}
           </PaperCard>
 
           {/* 落款 */}
           <View style={styles.about}>
             <Stamp text="味笺" size={64} />
-            <Text style={styles.aboutText}>味笺 · 第一卷</Text>
-            <Text style={styles.aboutVersion}>本地优先 · 数据仅存于本机</Text>
+            <Text style={styles.aboutText}>{t('profile.signature')}</Text>
+            <Text style={styles.aboutVersion}>{t('profile.local_first')}</Text>
           </View>
         </View>
+
+        {/* 账本切换弹层 */}
+        <Modal visible={bookSwitcherVisible} transparent animationType="fade" onRequestClose={() => setBookSwitcherVisible(false)}>
+          <Pressable style={styles.bookSwitcherOverlay} onPress={() => setBookSwitcherVisible(false)}>
+            <Pressable style={styles.bookSwitcherSheet} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.bookSwitcherHead}>
+                <Text style={styles.bookSwitcherTitle}>{t('profile.book_switcher_title')}</Text>
+                <TouchableOpacity onPress={() => setBookSwitcherVisible(false)}>
+                  <Ionicons name="close" size={22} color={Colors.ink} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.bookSwitcherHint}>{t('profile.book_switcher_hint')}</Text>
+              <ScrollView style={{ maxHeight: 360 }}>
+                {books.map((b) => {
+                  const active = b.id === currentBookId;
+                  return (
+                    <TouchableOpacity
+                      key={b.id}
+                      style={[styles.bookOption, active && styles.bookOptionActive]}
+                      onPress={async () => {
+                        setBookSwitcherVisible(false);
+                        await setCurrentBook(b.id);
+                      }}
+                    >
+                      <View style={[styles.bookDot, { backgroundColor: TAPE_COLOR_MAP[b.color] ?? Colors.tapeYellow }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bookOptionName}>{b.name}</Text>
+                        <Text style={styles.bookOptionKind}>{t('profile.book_kind_label', { kind: bookKindLabel(b.kind) })}</Text>
+                      </View>
+                      {active ? (
+                        <Ionicons name="checkmark-circle" size={20} color={Colors.olive} />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.bookSwitcherFooter}
+                onPress={() => {
+                  setBookSwitcherVisible(false);
+                  router.push('/books');
+                }}
+              >
+                <Ionicons name="settings-outline" size={16} color={Colors.inkSoft} />
+                <Text style={styles.bookSwitcherFooterText}>{t('profile.manage_books')}</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </SafeAreaView>
     </PaperBackground>
   );
@@ -317,6 +611,19 @@ const styles = StyleSheet.create({
   },
   exportRow: {
     paddingVertical: 4,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    letterSpacing: 1,
   },
   iconBox: {
     width: 34,
@@ -337,6 +644,18 @@ const styles = StyleSheet.create({
     color: Colors.ink,
     marginLeft: 8,
     letterSpacing: 1,
+  },
+  aboutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aboutVersionTag: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontFamily: Fonts.serif,
+    fontStyle: 'italic',
+    marginLeft: 8,
   },
   statRow: { flexDirection: 'row', alignItems: 'center' },
   statItem: { flex: 1 },
@@ -379,6 +698,113 @@ const styles = StyleSheet.create({
   about: { alignItems: 'center', paddingVertical: 28, gap: 8 },
   aboutText: { fontSize: 13, color: Colors.inkSoft, fontFamily: Fonts.serif },
   aboutVersion: { fontSize: 11, color: Colors.inkLight, fontStyle: 'italic' },
+  manageLink: {
+    fontSize: 12,
+    color: Colors.ochre,
+    fontFamily: Fonts.serif,
+    letterSpacing: 1,
+  },
+  currentBookRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  bookDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.ink,
+  },
+  bookName: {
+    fontSize: 16,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+    letterSpacing: 1,
+  },
+  bookHint: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  bookSwitcherOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  bookSwitcherSheet: {
+    width: '100%',
+    backgroundColor: Colors.note,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.ink,
+    padding: 18,
+    maxHeight: 480,
+  },
+  bookSwitcherHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  bookSwitcherTitle: {
+    fontSize: 17,
+    fontFamily: Fonts.serif,
+    fontWeight: '700',
+    color: Colors.ink,
+    letterSpacing: 2,
+  },
+  bookSwitcherHint: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  bookOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.lineSoft,
+  },
+  bookOptionActive: {
+    backgroundColor: Colors.paperLight,
+    borderRadius: 6,
+  },
+  bookOptionName: {
+    fontSize: 15,
+    fontFamily: Fonts.serif,
+    fontWeight: '600',
+    color: Colors.ink,
+  },
+  bookOptionKind: {
+    fontSize: 11,
+    color: Colors.inkLight,
+    marginTop: 2,
+  },
+  bookSwitcherFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.lineSoft,
+  },
+  bookSwitcherFooterText: {
+    fontSize: 13,
+    color: Colors.inkSoft,
+    fontFamily: Fonts.serif,
+    letterSpacing: 1,
+  },
   aboutIntro: {
     fontSize: 12,
     color: Colors.inkSoft,

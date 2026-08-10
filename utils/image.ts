@@ -19,7 +19,7 @@ const MAX_DIMENSION = 1080;
 
 /**
  * 自动缩小大图（避免占用过多存储与内存），返回新文件 URI。
- * 小图则原样返回。
+ * 小图则原样返回。大图会缩小后持久化到 documentDirectory，避免缓存被清理后失效。
  */
 export async function autoShrink(uri: string): Promise<string> {
   try {
@@ -35,7 +35,26 @@ export async function autoShrink(uri: string): Promise<string> {
       [{ resize: { width: Math.round(w * ratio) } }],
       { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
     );
-    return result.uri;
+    // ImageManipulator 返回的 URI 在缓存目录，系统清理后会失效
+    // 复制到持久化目录，保证照片长期可访问
+    const dir = `${FileSystem.documentDirectory}food_photos/`;
+    try {
+      const info = await FileSystem.getInfoAsync(dir);
+      if (!info.exists) {
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
+    } catch {
+      /* 目录已存在 */
+    }
+    const dest = `${dir}shrunk_${Date.now()}.jpg`;
+    await FileSystem.copyAsync({ from: result.uri, to: dest });
+    // 清理临时缓存文件
+    try {
+      await FileSystem.deleteAsync(result.uri, { idempotent: true });
+    } catch {
+      /* 忽略 */
+    }
+    return dest;
   } catch {
     return uri;
   }

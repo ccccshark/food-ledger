@@ -24,10 +24,12 @@ import { QuickEntries } from '@/components/QuickEntries';
 import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Stamp, DashedDivider, InkDot, Tape } from '@/components/Decorations';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
 import type { MealType, LedgerRecord as Rec } from '@/types';
 import { MEAL_ORDER } from '@/types';
 
 export default function HomeScreen() {
+  const { t } = useT();
   const today = useLedgerStore((s) => s.today);
   const todayRecords = useLedgerStore((s) => s.todayRecords);
   const monthSummary = useLedgerStore((s) => s.monthSummary);
@@ -79,18 +81,18 @@ export default function HomeScreen() {
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <Header title="味笺" date={cnDate} />
+          <Header title={t('index.title')} date={cnDate} />
 
           {/* 今日卡片：像贴在牛皮纸上的一页日记 */}
           <View style={styles.todayWrap}>
             <PaperCard tape="pink" rotate={-1.5} padding={20} style={styles.todayCard}>
               <View style={styles.todayHead}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.todayLabel}>今日所食 · 共费</Text>
+                  <Text style={styles.todayLabel}>{t('index.today_label')}</Text>
                   <Text style={styles.todayAmount}>{formatMoney(todayTotal)}</Text>
                   <Text style={styles.todayDate}>{formatDateCN(date)}</Text>
                 </View>
-                <Stamp text="今日" size={52} />
+                <Stamp text={t('index.stamp_today')} size={52} />
               </View>
 
               <DashedDivider />
@@ -103,7 +105,7 @@ export default function HomeScreen() {
                   return (
                     <View key={mKey} style={styles.mealItem}>
                       <InkDot color={meal.color} size={7} />
-                      <Text style={styles.mealLabel}>{meal.label}</Text>
+                      <Text style={styles.mealLabel}>{t(MEAL_T_KEY[mKey])}</Text>
                       <Text style={[styles.mealValue, v > 0 && { color: Colors.ink }]}>
                         {v > 0 ? `¥${v.toFixed(0)}` : '—'}
                       </Text>
@@ -115,25 +117,25 @@ export default function HomeScreen() {
           </View>
 
           {/* 快捷记账 */}
-          <Section title="随手记一笔" subtitle="轻点餐次，速记">
+          <Section title={t('index.quick_title')} subtitle={t('index.quick_sub')}>
             <QuickEntries />
           </Section>
 
           {/* 本月概览 */}
           <Section
-            title="本月花销"
-            subtitle={`共 ${monthCount} 笔`}
-            action="查看全部 ›"
+            title={t('index.month_title')}
+            subtitle={t('index.month_count', { n: monthCount })}
+            action={t('index.view_all')}
             onAction={() => router.push('/records')}
           >
             <View style={styles.statRow}>
               <PaperCard tape="green" rotate={1} padding={14} style={styles.statCard}>
-                <Text style={styles.statLabel}>本月支出</Text>
+                <Text style={styles.statLabel}>{t('index.month_expense')}</Text>
                 <Text style={styles.statValue}>{formatMoney(monthTotal)}</Text>
                 <View style={styles.statUnderline} />
               </PaperCard>
               <PaperCard tape="yellow" rotate={-1} padding={14} style={styles.statCard}>
-                <Text style={styles.statLabel}>月度预算</Text>
+                <Text style={styles.statLabel}>{t('index.monthly_budget')}</Text>
                 {budget > 0 ? (
                   <>
                     <Text style={styles.statValue}>{formatMoney(budget)}</Text>
@@ -151,12 +153,12 @@ export default function HomeScreen() {
                     </View>
                     <Text style={styles.progressText}>
                       {budgetUsed >= 100
-                        ? `已超支 ${formatMoney(monthTotal - budget)}`
-                        : `已用 ${budgetUsed.toFixed(0)}%`}
+                        ? t('index.over_budget', { n: formatMoney(monthTotal - budget) })
+                        : t('index.used_pct', { n: budgetUsed.toFixed(0) })}
                     </Text>
                   </>
                 ) : (
-                  <Text style={styles.statHint}>未设置</Text>
+                  <Text style={styles.statHint}>{t('index.not_set')}</Text>
                 )}
               </PaperCard>
             </View>
@@ -164,7 +166,7 @@ export default function HomeScreen() {
 
           {/* 今日明细 */}
           <Section
-            title="今日明细"
+            title={t('index.today_detail')}
             action={
               todayRecords.length > 0 ? (
                 <TouchableOpacity onPress={() => router.push('/add')}>
@@ -176,9 +178,9 @@ export default function HomeScreen() {
             {todayRecords.length === 0 ? (
               <Empty
                 icon="book-outline"
-                text="今日尚未记一笔"
-                hint="点击上方餐次贴纸开始记录"
-                actionLabel="记一笔"
+                text={t('index.empty_text')}
+                hint={t('index.empty_hint')}
+                actionLabel={t('index.empty_action')}
                 onAction={() => router.push('/add')}
               />
             ) : (
@@ -252,10 +254,10 @@ function RecordRow({ r, last }: { r: Rec; last: boolean }) {
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.rRowHead}>
-          <Text style={styles.rMeal}>{meal.label}</Text>
-          {tags.slice(0, 2).map((t) => (
-            <View key={t} style={[styles.rTag, { borderColor: meal.color }]}>
-              <Text style={[styles.rTagText, { color: meal.color }]}>{t}</Text>
+          <Text style={styles.rMeal}>{t(MEAL_T_KEY[r.meal as MealType])}</Text>
+          {tags.slice(0, 2).map((tg) => (
+            <View key={tg} style={[styles.rTag, { borderColor: meal.color }]}>
+              <Text style={[styles.rTagText, { color: meal.color }]}>{tg}</Text>
             </View>
           ))}
         </View>

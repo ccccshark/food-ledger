@@ -58,7 +58,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "允许获取位置以记录用餐地点。"
         }
-      ]
+      ],
+      "./plugins/withWidget"
     ],
     "experiments": {
       "typedRoutes": true

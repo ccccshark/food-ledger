@@ -2,8 +2,10 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Fonts } from '@/constants/theme';
+import { useT } from '@/constants/i18n';
 
 export default function TabsLayout() {
+  const { t } = useT();
   return (
     <Tabs
       screenOptions={{
@@ -29,7 +31,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '记账',
+          title: t('tab.record'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="restaurant" size={size} color={color} />
           ),
@@ -38,7 +40,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: '日历',
+          title: t('tab.calendar'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar" size={size} color={color} />
           ),
@@ -47,7 +49,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="footprint"
         options={{
-          title: '足迹',
+          title: t('tab.footprint'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="map" size={size} color={color} />
           ),
@@ -56,7 +58,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: '统计',
+          title: t('tab.stats'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pie-chart" size={size} color={color} />
           ),
@@ -65,7 +67,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: '我的',
+          title: t('tab.profile'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),

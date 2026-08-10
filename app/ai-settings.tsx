@@ -19,8 +19,10 @@ import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider } from '@/components/Decorations';
 import { AiConfig, DEFAULT_AI_CONFIG, recognizeFood } from '@/services/ai';
 import * as ImagePicker from 'expo-image-picker';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
 
 export default function AiSettingsScreen() {
+  useT(); // subscribe to lang changes for re-render
   const aiConfig = useLedgerStore((s) => s.aiConfig);
   const refreshAiConfig = useLedgerStore((s) => s.refreshAiConfig);
   const setAiConfig = useLedgerStore((s) => s.setAiConfig);
@@ -52,18 +54,18 @@ export default function AiSettingsScreen() {
     };
     await setAiConfig(cfg);
     showDialog({
-      title: '已保存',
-      message: 'AI 配置已保存到本地',
+      title: t('ai.saved'),
+      message: t('ai.saved_msg'),
       icon: 'checkmark-circle-outline',
-      buttons: [{ text: '好的', onPress: () => router.back() }],
+      buttons: [{ text: t('common.ok'), onPress: () => router.back() }],
     });
   };
 
   const onTest = async () => {
     if (!apiKey.trim()) {
       showDialog({
-        title: '提示',
-        message: '请先填写 API Key',
+        title: t('common.tip'),
+        message: t('ai.fill_apikey'),
         icon: 'alert-circle-outline',
       });
       return;
@@ -74,8 +76,8 @@ export default function AiSettingsScreen() {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         showDialog({
-          title: '提示',
-          message: '需要相册权限才能测试',
+          title: t('common.tip'),
+          message: t('ai.need_album_perm'),
           icon: 'alert-circle-outline',
         });
         return;
@@ -94,14 +96,18 @@ export default function AiSettingsScreen() {
       };
       const r = await recognizeFood(cfg, result.assets[0].uri);
       showDialog({
-        title: '测试成功',
-        message: `识别结果：\n金额=${r.amount ?? '—'}\n餐次=${r.meal ?? '—'}\n备注=${r.note ?? '—'}`,
+        title: t('ai.test_success'),
+        message: t('ai.test_success_msg', {
+          amount: r.amount ?? '—',
+          meal: r.meal ? t(MEAL_T_KEY[r.meal]) : '—',
+          note: r.note ?? '—',
+        }),
         icon: 'checkmark-circle-outline',
       });
     } catch (e: any) {
       showDialog({
-        title: '测试失败',
-        message: e?.message ?? '未知错误',
+        title: t('ai.test_failed'),
+        message: e?.message ?? t('common.unknown_error'),
         icon: 'alert-circle-outline',
       });
     } finally {
@@ -118,7 +124,7 @@ export default function AiSettingsScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
             <Tape color="yellow" width={20} height={10} rotate={-5} />
-            <Text style={styles.headerTitle}>AI 助手设置</Text>
+            <Text style={styles.headerTitle}>{t('ai.title')}</Text>
           </View>
           <View style={{ width: 40 }} />
         </View>
@@ -129,12 +135,10 @@ export default function AiSettingsScreen() {
             <PaperCard tape="pink" rotate={0} padding={14} showTape>
               <View style={styles.cardTitleRow}>
                 <Ionicons name="bulb-outline" size={16} color={Colors.ochre} />
-                <Text style={styles.cardTitle}>关于 AI 识别</Text>
+                <Text style={styles.cardTitle}>{t('ai.about')}</Text>
               </View>
               <Text style={styles.desc}>
-                采用 OpenAI 兼容协议，支持 OpenAI / 智谱 GLM-4V / 通义千问 VL 等。
-                配置后可在记账页用「AI 识别」拍照自动填金额、餐次、标签。
-                所有配置仅存于本机。
+                {t('ai.about_desc')}
               </Text>
             </PaperCard>
           </View>
@@ -144,18 +148,17 @@ export default function AiSettingsScreen() {
             <PaperCard tape="yellow" rotate={0} padding={14} showTape>
               <View style={styles.cardTitleRow}>
                 <Ionicons name="bookmark-outline" size={16} color={Colors.ochre} />
-                <Text style={styles.cardTitle}>不想配置？用速记模板</Text>
+                <Text style={styles.cardTitle}>{t('ai.no_config_title')}</Text>
               </View>
               <Text style={styles.desc}>
-                记账页顶部的「速记模板」无需任何 API，点选常见美食即可一键填表
-                （金额、餐次、备注、标签自动带入，可再修改）。适合不想折腾配置的用户。
+                {t('ai.no_config_desc')}
               </Text>
               <TouchableOpacity
                 style={styles.guideCta}
                 onPress={() => router.push('/add')}
               >
                 <Ionicons name="pencil-outline" size={14} color={Colors.note} />
-                <Text style={styles.guideCtaText}>去试试速记模板</Text>
+                <Text style={styles.guideCtaText}>{t('ai.try_template')}</Text>
               </TouchableOpacity>
             </PaperCard>
           </View>
@@ -165,26 +168,26 @@ export default function AiSettingsScreen() {
             <PaperCard tape="blue" rotate={0} padding={14} showTape>
               <View style={styles.cardTitleRow}>
                 <Ionicons name="book-outline" size={16} color={Colors.olive} />
-                <Text style={styles.cardTitle}>配置引导（推荐智谱 GLM-4V）</Text>
+                <Text style={styles.cardTitle}>{t('ai.guide')}</Text>
               </View>
               <Text style={styles.stepText}>
-                <Text style={styles.stepNum}>1.</Text> 点击下方「智谱 GLM-4V」按钮，自动填好地址和模型名。
+                <Text style={styles.stepNum}>1.</Text> {t('ai.step1')}
               </Text>
               <Text style={styles.stepText}>
-                <Text style={styles.stepNum}>2.</Text> 浏览器打开{' '}
-                <Text style={styles.linkText}>open.bigmodel.cn</Text>，注册/登录智谱开放平台。
+                <Text style={styles.stepNum}>2.</Text> {t('ai.step2')}{' '}
+                <Text style={styles.linkText}>open.bigmodel.cn</Text>{t('ai.step2_suffix')}
               </Text>
               <Text style={styles.stepText}>
-                <Text style={styles.stepNum}>3.</Text> 进入「API Keys」页面，点击「添加新的 API Key」，复制生成的密钥（以 xxxxxx 开头）。
+                <Text style={styles.stepNum}>3.</Text> {t('ai.step3')}
               </Text>
               <Text style={styles.stepText}>
-                <Text style={styles.stepNum}>4.</Text> 把密钥粘贴到下方「API Key」输入框。
+                <Text style={styles.stepNum}>4.</Text> {t('ai.step4')}
               </Text>
               <Text style={styles.stepText}>
-                <Text style={styles.stepNum}>5.</Text> 打开上方「启用 AI 识别」开关，点「测试识别」选张美食图验证，成功后「保存」即可。
+                <Text style={styles.stepNum}>5.</Text> {t('ai.step5')}
               </Text>
               <Text style={styles.tipText}>
-                提示：智谱新用户有免费额度，足够日常记账使用；OpenAI / 通义千问配置方式类似，先选对应预设再填各自的 Key。
+                {t('ai.tip_msg')}
               </Text>
             </PaperCard>
           </View>
@@ -194,8 +197,8 @@ export default function AiSettingsScreen() {
             <PaperCard tape="green" rotate={0} padding={14} showTape={false}>
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.switchTitle}>启用 AI 识别</Text>
-                  <Text style={styles.switchHint}>关闭后记账页不显示 AI 入口（速记模板仍可用）</Text>
+                  <Text style={styles.switchTitle}>{t('ai.enable')}</Text>
+                  <Text style={styles.switchHint}>{t('ai.enable_hint')}</Text>
                 </View>
                 <Switch
                   value={enabled}
@@ -212,16 +215,16 @@ export default function AiSettingsScreen() {
             <PaperCard tape="yellow" rotate={0} padding={16} showTape={false}>
               <Field label="API Base URL" placeholder="https://api.openai.com/v1" value={baseUrl} onChange={setBaseUrl} />
               <Field label="API Key" placeholder="sk-..." value={apiKey} onChange={setApiKey} secure />
-              <Field label="模型名" placeholder="gpt-4o" value={model} onChange={setModel} />
+              <Field label={t('ai.model_label')} placeholder="gpt-4o" value={model} onChange={setModel} />
 
               <DashedDivider />
 
-              <Text style={styles.presetTitle}>常用配置示例（点选自动填入）：</Text>
-              <PresetButton label="智谱 GLM-4V（推荐）" desc="glm-4v · open.bigmodel.cn" onPress={() => {
+              <Text style={styles.presetTitle}>{t('ai.preset_title')}</Text>
+              <PresetButton label={t('ai.preset_recommended')} desc="glm-4v · open.bigmodel.cn" onPress={() => {
                 setBaseUrl('https://open.bigmodel.cn/api/paas/v4');
                 setModel('glm-4v');
               }} />
-              <PresetButton label="通义千问 VL" desc="qwen-vl-max · dashscope.aliyuncs.com" onPress={() => {
+              <PresetButton label={t('ai.preset_qwen')} desc="qwen-vl-max · dashscope.aliyuncs.com" onPress={() => {
                 setBaseUrl('https://dashscope.aliyuncs.com/compatible-mode/v1');
                 setModel('qwen-vl-max');
               }} />
@@ -243,11 +246,11 @@ export default function AiSettingsScreen() {
                 {testing ? (
                   <ActivityIndicator size="small" color={Colors.olive} />
                 ) : (
-                  <Text style={styles.btnSecondaryText}>测试识别</Text>
+                  <Text style={styles.btnSecondaryText}>{t('ai.test')}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onSave}>
-                <Text style={styles.btnPrimaryText}>保存</Text>
+                <Text style={styles.btnPrimaryText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>

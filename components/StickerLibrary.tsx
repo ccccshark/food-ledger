@@ -15,6 +15,7 @@ import { Colors, Fonts } from '@/constants/theme';
 import { showDialog } from '@/stores/dialog';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { t, useT } from '@/constants/i18n';
 
 // 贴纸类型
 export type StickerKind = 'food' | 'divider' | 'note' | 'diy';
@@ -23,6 +24,8 @@ export interface StickerItem {
   id: string;
   kind: StickerKind;
   label: string;
+  // 翻译 key（内置贴纸用，diy 不填）
+  tKey?: string;
   // food/divider/note 用 SVG 路径渲染；diy 用图片 URI
   svg?: React.ReactNode;
   uri?: string;
@@ -182,19 +185,19 @@ function HeartNoteSvg() {
 
 // 内置贴纸库
 export const BUILTIN_STICKERS: StickerItem[] = [
-  { id: 'f-coffee', kind: 'food', label: '咖啡', svg: <CoffeeSvg /> },
-  { id: 'f-hotpot', kind: 'food', label: '火锅', svg: <HotpotSvg /> },
-  { id: 'f-noodle', kind: 'food', label: '面条', svg: <NoodleSvg /> },
-  { id: 'f-cake', kind: 'food', label: '蛋糕', svg: <CakeSvg /> },
-  { id: 'f-fruit', kind: 'food', label: '水果', svg: <FruitSvg /> },
-  { id: 'f-tea', kind: 'food', label: '茶饮', svg: <TeaSvg /> },
-  { id: 'f-bowl', kind: 'food', label: '米饭', svg: <BowlSvg /> },
-  { id: 'f-beer', kind: 'food', label: '酒水', svg: <BeerSvg /> },
-  { id: 'd-dash', kind: 'divider', label: '虚线', svg: <DashedDividerSvg /> },
-  { id: 'd-wave', kind: 'divider', label: '波浪', svg: <WaveDividerSvg /> },
-  { id: 'd-star', kind: 'divider', label: '星线', svg: <StarDividerSvg /> },
-  { id: 'n-pin', kind: 'note', label: '便签', svg: <NotePinSvg /> },
-  { id: 'n-heart', kind: 'note', label: '心形', svg: <HeartNoteSvg /> },
+  { id: 'f-coffee', kind: 'food', label: '咖啡', tKey: 'sticker.food.coffee', svg: <CoffeeSvg /> },
+  { id: 'f-hotpot', kind: 'food', label: '火锅', tKey: 'sticker.food.hotpot', svg: <HotpotSvg /> },
+  { id: 'f-noodle', kind: 'food', label: '面条', tKey: 'sticker.food.noodle', svg: <NoodleSvg /> },
+  { id: 'f-cake', kind: 'food', label: '蛋糕', tKey: 'sticker.food.cake', svg: <CakeSvg /> },
+  { id: 'f-fruit', kind: 'food', label: '水果', tKey: 'sticker.food.fruit', svg: <FruitSvg /> },
+  { id: 'f-tea', kind: 'food', label: '茶饮', tKey: 'sticker.food.tea', svg: <TeaSvg /> },
+  { id: 'f-bowl', kind: 'food', label: '米饭', tKey: 'sticker.food.bowl', svg: <BowlSvg /> },
+  { id: 'f-beer', kind: 'food', label: '酒水', tKey: 'sticker.food.beer', svg: <BeerSvg /> },
+  { id: 'd-dash', kind: 'divider', label: '虚线', tKey: 'sticker.divider.dash', svg: <DashedDividerSvg /> },
+  { id: 'd-wave', kind: 'divider', label: '波浪', tKey: 'sticker.divider.wave', svg: <WaveDividerSvg /> },
+  { id: 'd-star', kind: 'divider', label: '星线', tKey: 'sticker.divider.star', svg: <StarDividerSvg /> },
+  { id: 'n-pin', kind: 'note', label: '便签', tKey: 'sticker.note.pin', svg: <NotePinSvg /> },
+  { id: 'n-heart', kind: 'note', label: '心形', tKey: 'sticker.note.heart', svg: <HeartNoteSvg /> },
 ];
 
 // 贴纸库弹层
@@ -211,13 +214,14 @@ export function StickerLibrary({
   diyStickers: StickerItem[];
   onAddDiy: (s: StickerItem) => void;
 }) {
+  useT(); // subscribe to lang changes for re-render
   const [tab, setTab] = useState<StickerKind>('food');
 
   const tabs: { key: StickerKind; label: string; icon: string }[] = [
-    { key: 'food', label: '美食', icon: 'restaurant-outline' },
-    { key: 'divider', label: '分割线', icon: 'remove-outline' },
-    { key: 'note', label: '便签', icon: 'bookmark-outline' },
-    { key: 'diy', label: '我的', icon: 'happy-outline' },
+    { key: 'food', label: t('sticker.tab.food'), icon: 'restaurant-outline' },
+    { key: 'divider', label: t('sticker.tab.divider'), icon: 'remove-outline' },
+    { key: 'note', label: t('sticker.tab.note'), icon: 'bookmark-outline' },
+    { key: 'diy', label: t('sticker.tab.diy'), icon: 'happy-outline' },
   ];
 
   const list =
@@ -229,8 +233,8 @@ export function StickerLibrary({
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       showDialog({
-        title: '提示',
-        message: '需要相册权限才能上传贴纸',
+        title: t('common.tip'),
+        message: t('sticker.need_perm'),
         icon: 'alert-circle-outline',
       });
       return;
@@ -258,7 +262,7 @@ export function StickerLibrary({
     const item: StickerItem = {
       id: `diy-${Date.now()}`,
       kind: 'diy',
-      label: '自定义',
+      label: t('sticker.diy_label'),
       uri: dest,
     };
     onAddDiy(item);
@@ -277,7 +281,7 @@ export function StickerLibrary({
       ) : (
         <View style={styles.svgWrap}>{item.svg}</View>
       )}
-      <Text style={styles.cellLabel}>{item.label}</Text>
+      <Text style={styles.cellLabel}>{item.tKey ? t(item.tKey) : item.label}</Text>
     </TouchableOpacity>
   );
 
@@ -286,7 +290,7 @@ export function StickerLibrary({
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>贴纸库</Text>
+            <Text style={styles.title}>{t('sticker.title')}</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={22} color={Colors.ink} />
             </TouchableOpacity>
@@ -294,16 +298,16 @@ export function StickerLibrary({
 
           {/* 标签栏 */}
           <View style={styles.tabRow}>
-            {tabs.map((t) => {
-              const active = tab === t.key;
+            {tabs.map((tb) => {
+              const active = tab === tb.key;
               return (
                 <TouchableOpacity
-                  key={t.key}
+                  key={tb.key}
                   style={[styles.tab, active && styles.tabActive]}
-                  onPress={() => setTab(t.key)}
+                  onPress={() => setTab(tb.key)}
                 >
-                  <Ionicons name={t.icon as keyof typeof Ionicons.glyphMap} size={13} color={active ? Colors.note : Colors.inkSoft} />
-                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+                  <Ionicons name={tb.icon as keyof typeof Ionicons.glyphMap} size={13} color={active ? Colors.note : Colors.inkSoft} />
+                  <Text style={[styles.tabText, active && styles.tabTextActive]}>{tb.label}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -312,7 +316,7 @@ export function StickerLibrary({
           {tab === 'diy' ? (
             <TouchableOpacity style={styles.uploadBtn} onPress={onUploadDiy}>
               <Ionicons name="cloud-upload-outline" size={16} color={Colors.olive} />
-              <Text style={styles.uploadText}>上传自定义贴纸（方形最佳）</Text>
+              <Text style={styles.uploadText}>{t('sticker.upload')}</Text>
             </TouchableOpacity>
           ) : null}
 
@@ -324,8 +328,8 @@ export function StickerLibrary({
             contentContainerStyle={styles.grid}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>还没有自定义贴纸</Text>
-                <Text style={styles.emptyHint}>点击上方按钮上传</Text>
+                <Text style={styles.emptyText}>{t('sticker.empty_text')}</Text>
+                <Text style={styles.emptyHint}>{t('sticker.empty_hint')}</Text>
               </View>
             }
           />

@@ -18,12 +18,14 @@ import { Header } from '@/components/Header';
 import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, InkDot } from '@/components/Decorations';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
 import type { MealType, LedgerRecord as Rec, DaySummary } from '@/types';
 import * as dao from '@/db';
 
-const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+const WEEK_KEYS = [0, 1, 2, 3, 4, 5, 6];
 
 export default function CalendarScreen() {
+  const { t } = useT();
   const monthCalendar = useLedgerStore((s) => s.monthCalendar);
   const refreshMonthCalendar = useLedgerStore((s) => s.refreshMonthCalendar);
   const currentMonth = useLedgerStore((s) => s.currentMonth);
@@ -88,7 +90,7 @@ export default function CalendarScreen() {
   return (
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="美食日历" date={`${toCNNumber(y)}年${toCNNumber(m)}月`} />
+        <Header title={t('calendar.title')} date={`${toCNNumber(y)}年${toCNNumber(m)}月`} />
         <ScrollView
           style={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -105,7 +107,7 @@ export default function CalendarScreen() {
                     {toCNNumber(y)}年{toCNNumber(m)}月
                   </Text>
                   <Text style={styles.monthSwitchSub}>
-                    {monthCount} 笔 · {formatMoney(monthTotal)}
+                    {t('calendar.month_count', { n: monthCount, amount: formatMoney(monthTotal) })}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => shiftMonth(1)} style={styles.navBtn}>
@@ -120,15 +122,15 @@ export default function CalendarScreen() {
             <PaperCard tape="yellow" rotate={0} padding={10} showTape={false}>
               {/* 星期表头 */}
               <View style={styles.weekRow}>
-                {WEEK.map((w, i) => (
-                  <View key={w} style={styles.weekCell}>
+                {WEEK_KEYS.map((i) => (
+                  <View key={i} style={styles.weekCell}>
                     <Text
                       style={[
                         styles.weekText,
                         (i === 0 || i === 6) && { color: Colors.stamp },
                       ]}
                     >
-                      {w}
+                      {t(`week.${i}`)}
                     </Text>
                   </View>
                 ))}
@@ -151,8 +153,8 @@ export default function CalendarScreen() {
           {monthCount === 0 ? (
             <Empty
               icon="calendar-outline"
-              text="本月还没有记录"
-              hint="记账后这里会出现美食日历"
+              text={t('calendar.empty_text')}
+              hint={t('calendar.empty_hint')}
             />
           ) : null}
 
@@ -181,7 +183,7 @@ export default function CalendarScreen() {
               {dayRecords.length === 0 ? (
                 <View style={styles.modalEmptyWrap}>
                   <Ionicons name="receipt-outline" size={32} color={Colors.inkLight} />
-                  <Text style={styles.modalEmpty}>当日无记录</Text>
+                  <Text style={styles.modalEmpty}>{t('calendar.modal_empty')}</Text>
                 </View>
               ) : (
                 <>
@@ -196,7 +198,7 @@ export default function CalendarScreen() {
                     ))}
                   </ScrollView>
                   <View style={styles.modalTotalRow}>
-                    <Text style={styles.modalTotalLabel}>当日合计</Text>
+                    <Text style={styles.modalTotalLabel}>{t('calendar.modal_total')}</Text>
                     <Text style={styles.modalTotalValue}>
                       ¥{dayRecords.reduce((s, r) => s + r.amount, 0).toFixed(2)}
                     </Text>
@@ -215,7 +217,7 @@ export default function CalendarScreen() {
                 }}
               >
                 <Ionicons name="add" size={16} color={Colors.note} />
-                <Text style={styles.modalAddText}>补记一笔</Text>
+                <Text style={styles.modalAddText}>{t('calendar.modal_add')}</Text>
               </TouchableOpacity>
             </Pressable>
           </Pressable>
@@ -228,7 +230,7 @@ export default function CalendarScreen() {
 function formatModalDate(date: string): string {
   const [, m, d] = date.split('-').map(Number);
   const wd = new Date(date).getDay();
-  return `${toCNNumber(m)}月${toCNNumber(d)}日 · 周${WEEK[wd]}`;
+  return `${toCNNumber(m)}月${toCNNumber(d)}日 · ${t(`weekday.${wd}`)}`;
 }
 
 function CalendarCell({
@@ -274,7 +276,7 @@ function CalendarCell({
           <Text style={styles.cellAmount} numberOfLines={1}>
             ¥{summary.total.toFixed(0)}
           </Text>
-          <Text style={styles.cellCount}>{summary.count}笔</Text>
+          <Text style={styles.cellCount}>{t('calendar.cell_count', { n: summary.count })}</Text>
         </View>
       ) : null}
     </TouchableOpacity>
@@ -305,10 +307,10 @@ function DayRecordRow({
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.rRowHead}>
-          <Text style={styles.rMeal}>{meal.label}</Text>
-          {tags.slice(0, 2).map((t) => (
-            <View key={t} style={[styles.rTag, { borderColor: meal.color }]}>
-              <Text style={[styles.rTagText, { color: meal.color }]}>{t}</Text>
+          <Text style={styles.rMeal}>{t(MEAL_T_KEY[r.meal as MealType])}</Text>
+          {tags.slice(0, 2).map((tg) => (
+            <View key={tg} style={[styles.rTag, { borderColor: meal.color }]}>
+              <Text style={[styles.rTagText, { color: meal.color }]}>{tg}</Text>
             </View>
           ))}
         </View>

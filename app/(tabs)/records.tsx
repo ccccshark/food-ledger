@@ -16,6 +16,7 @@ import { Header } from '@/components/Header';
 import { Empty } from '@/components/Empty';
 import { PaperBackground } from '@/components/PaperBackground';
 import { PaperCard, Tape, DashedDivider, InkDot } from '@/components/Decorations';
+import { t, useT, MEAL_T_KEY } from '@/constants/i18n';
 import type { MealType, LedgerRecord as Rec } from '@/types';
 
 interface MonthGroup {
@@ -25,6 +26,7 @@ interface MonthGroup {
 }
 
 export default function RecordsScreen() {
+  const { t } = useT();
   const allRecords = useLedgerStore((s) => s.allRecords);
   const refreshAllRecords = useLedgerStore((s) => s.refreshAllRecords);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,9 +61,9 @@ export default function RecordsScreen() {
     <PaperBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <Header
-          title="账目册"
-          date="逐笔登账"
-          rightLabel="记一笔"
+          title={t('records.title')}
+          date={t('records.subtitle')}
+          rightLabel={t('records.add')}
           onRight={() => router.push('/add')}
         />
 
@@ -83,9 +85,9 @@ export default function RecordsScreen() {
           ListEmptyComponent={
             <Empty
               icon="receipt-outline"
-              text="账本尚空"
-              hint="开始记录你的第一笔美食支出吧"
-              actionLabel="记一笔"
+              text={t('records.empty_text')}
+              hint={t('records.empty_hint')}
+              actionLabel={t('records.empty_action')}
               onAction={() => router.push('/add')}
             />
           }
@@ -106,10 +108,10 @@ function MonthHeader({ section }: { section: MonthGroup }) {
             <Text style={styles.monthTitle}>
               {toCNNumber(y)}年{toCNNumber(m)}月
             </Text>
-            <Text style={styles.monthSub}>共 {section.data.length} 笔</Text>
+            <Text style={styles.monthSub}>{t('records.month_count', { n: section.data.length })}</Text>
           </View>
           <View style={styles.monthTotalBox}>
-            <Text style={styles.monthTotalLabel}>小计</Text>
+            <Text style={styles.monthTotalLabel}>{t('records.subtotal')}</Text>
             <Text style={styles.monthTotal}>{formatMoney(section.total)}</Text>
           </View>
         </View>
@@ -138,10 +140,10 @@ function RecordItem({ r }: { r: Rec }) {
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.itemRow}>
-          <Text style={styles.itemMeal}>{meal.label}</Text>
-          {tags.slice(0, 2).map((t) => (
-            <View key={t} style={[styles.itemTag, { borderColor: meal.color }]}>
-              <Text style={[styles.itemTagText, { color: meal.color }]}>{t}</Text>
+          <Text style={styles.itemMeal}>{t(MEAL_T_KEY[r.meal as MealType])}</Text>
+          {tags.slice(0, 2).map((tg) => (
+            <View key={tg} style={[styles.itemTag, { borderColor: meal.color }]}>
+              <Text style={[styles.itemTagText, { color: meal.color }]}>{tg}</Text>
             </View>
           ))}
         </View>
